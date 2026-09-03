@@ -26,6 +26,15 @@ class TargetStore {
 
   all () { return this.data.targets }
 
+  // Whether the bar shows up in screen recordings. Off by default so the bar
+  // never pollutes a capture of the page; on when the capture is of Blank.
+  barInCaptures () { return !!this.data.barInCaptures }
+  setBarInCaptures (on) {
+    this.data.barInCaptures = !!on
+    this.save()
+    return this.data.barInCaptures
+  }
+
   // Corner radius is a house style rather than a per-project fact, so it's
   // stored once and applied to everything.
   radius () { return this.data.radius || 0 }

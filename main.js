@@ -161,8 +161,7 @@ function createBar () {
 
   bar.setAlwaysOnTop(true, 'floating')
   bar.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  // Verified on macOS 26.6.2: omits this window from ScreenCaptureKit entirely.
-  bar.setContentProtection(true)
+  applyBarCapture()
 
   if (FEATURES.scroll) hookScrollEvents(bar.webContents)
   bar.loadFile(path.join(__dirname, 'ui', 'bar.html'))
@@ -171,6 +170,22 @@ function createBar () {
     bar.showInactive()
     pushState()
   })
+}
+
+// Verified on macOS 26.6.2: content protection omits the bar from
+// ScreenCaptureKit entirely. It's on unless you're recording Blank itself.
+function applyBarCapture () {
+  if (!bar || bar.isDestroyed()) return
+  bar.setContentProtection(!store.barInCaptures())
+}
+
+function barCaptureItem () {
+  return {
+    label: 'Show Bar in Recordings',
+    type: 'checkbox',
+    checked: store.barInCaptures(),
+    click: (mi) => { store.setBarInCaptures(mi.checked); applyBarCapture(); pushState() }
+  }
 }
 
 // Centered under the stage, flipping above when there's no room below.
@@ -562,6 +577,8 @@ function popupMoreMenu () {
     { label: 'Open File or Folder…', accelerator: 'Cmd+O', click: pickTarget },
     { label: 'Close Target', enabled: !!t, click: closeTarget },
     { type: 'separator' },
+    barCaptureItem(),
+    { type: 'separator' },
     {
       label: 'Forget This Target',
       enabled: !!t,
@@ -609,6 +626,7 @@ function trayMenu () {
     { label: 'Open File or Folder…', click: () => { showRig(); pickTarget() } },
     { label: t ? `Close ${t.name}` : 'Close Target', enabled: !!t, click: closeTarget },
     { type: 'separator' },
+    barCaptureItem(),
     {
       label: 'Launch at Login',
       type: 'checkbox',
@@ -715,6 +733,7 @@ app.whenReady().then(async () => {
     require(path.resolve(process.env.STAGE_PROBE))({
       stage: () => stage, view: () => view, bar: () => bar,
       startScroll, scrollCmd, setScroll, setRadius, applySize, openPath, closeTarget, storeRadius: () => store.radius(), toggleRig,
+      storeBarInCaptures: () => store.barInCaptures(), setBarInCaptures: (on) => { store.setBarInCaptures(on); applyBarCapture() },
       scrollState: () => scrollState
     })
   }

@@ -30,7 +30,9 @@ Login and Quit. Hiding is not quitting — the tray keeps it alive.
 
 - `setContentProtection(true)` genuinely omits the panel from ScreenCaptureKit —
   it disappears from recordings rather than going black. The panel can therefore
-  overlap the stage without polluting a capture.
+  overlap the stage without polluting a capture. **Show Bar in Recordings**
+  (••• or the menu bar icon) turns protection off for when the recording is
+  of Blank itself.
 - `useContentSize` gives an exact CSS-pixel viewport (1440 × 900 reads back as
   1440 × 900), so presets don't need CDP device-metrics override yet.
 
