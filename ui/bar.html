@@ -6,10 +6,13 @@
     /* -apple-system resolves to SF Pro on macOS; the named faces are a belt
        for anything that resolves system-ui differently. */
     --font:-apple-system, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
-    /* Dark wash composited over the window's native blur. */
-    --ink:#f4f2ee; --dim:rgba(255,255,255,.58); --faint:rgba(255,255,255,.34);
-    --bar:rgba(24,23,21,.34); --rule:rgba(255,255,255,.07);
-    --sunk:rgba(255,255,255,.10); --accent:#ff8a72;
+    /* Dark wash over the window's native blur. The blur backdrop can be
+       anything up to pure white, so the wash is set for that worst case:
+       at 86% the ink reads 4.8:1 and the dim text 4.5:1 (WCAG AA) on white;
+       darker desktops only improve it. */
+    --ink:#f4f2ee; --dim:rgba(255,255,255,.8);
+    --bar:rgba(20,19,17,.86); --bar-hot:rgba(44,42,39,.9);
+    --rule:rgba(255,255,255,.07); --accent:#ff8a72;
   }
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; background:transparent; overflow:hidden; }
@@ -29,7 +32,7 @@
   .bar:active { cursor:grabbing; }
   .bar input { cursor:text; }
   .bar button { cursor:pointer; }
-  .bar.hot { background:rgba(255,255,255,.14); }
+  .bar.hot { background:var(--bar-hot); }
 
   .field { flex:1; min-width:0; display:flex; align-items:center; gap:7px; }
   input {
@@ -37,7 +40,7 @@
     flex:1; min-width:0; font:12.5px var(--font);
     color:var(--ink); text-overflow:ellipsis;
   }
-  input::placeholder { color:var(--faint); }
+  input::placeholder { color:var(--dim); }
 
   .btn {
     all:unset; flex:none; padding:5px 9px; border-radius:7px; cursor:pointer;
@@ -45,7 +48,7 @@
     font-variant-numeric:tabular-nums;   /* readouts shouldn't jitter */
     display:flex; align-items:center; gap:5px;
   }
-  .btn:hover { background:var(--sunk); color:var(--ink); }
+  .btn:hover { color:var(--ink); }
   input::selection { background:rgba(255,255,255,.22); }
   .btn.over { color:var(--accent); }
   .btn.live { color:var(--accent); }
@@ -58,7 +61,7 @@
     all:unset; width:2.4ch; text-align:right; font:12px var(--font);
     color:inherit; font-variant-numeric:tabular-nums; cursor:text;
   }
-  .num:focus-within { background:var(--sunk); color:var(--ink); }
+  .num:focus-within { color:var(--ink); }
 </style>
 
 <div class="bar" id="bar">
