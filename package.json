@@ -1,0 +1,12 @@
+{
+  "name": "stage",
+  "version": "0.0.1",
+  "description": "A clean stage for capturing web work",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.1.1"
+  }
+}

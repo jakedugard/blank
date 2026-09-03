@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>fixture</title>
+<style>
+  :root { --ink:#141412; --paper:#f4f2ed; --rule:#cdc9bf; }
+  body { margin:0; background:var(--paper); color:var(--ink);
+         font:13px/1.5 ui-monospace,"SF Mono",Menlo,monospace; }
+  .edge { position:fixed; background:#d0402c; z-index:9; }
+  .t{top:0;left:0;right:0;height:1px}.b{bottom:0;left:0;right:0;height:1px}
+  .l{top:0;bottom:0;left:0;width:1px}.r{top:0;bottom:0;right:0;width:1px}
+  .hero { height:100vh; display:grid; place-content:center; text-align:center; }
+  .dims { font-size:56px; font-weight:500; letter-spacing:-.03em; }
+  .ok { margin-top:10px; color:#2e7d4f; }
+  .band { height:180px; margin:0 48px; border-top:1px solid var(--rule);
+          padding-top:8px; color:#6b675e; }
+</style>
+<div class="edge t"></div><div class="edge b"></div>
+<div class="edge l"></div><div class="edge r"></div>
+<div class="hero">
+  <div class="dims" id="d">—</div>
+  <div class="ok" id="m">module: not loaded</div>
+</div>
+<div id="list"></div>
+<script type="module">
+  import { bands } from './mod.js'
+  document.getElementById('m').textContent = 'module loaded ✓  (' + bands.length + ' bands)'
+  const l = document.getElementById('list')
+  for (const b of bands) {
+    const d = document.createElement('div')
+    d.className = 'band'; d.textContent = String(b).padStart(5,'0') + ' px'
+    l.appendChild(d)
+  }
+</script>
+<script>
+  const r = () => d.textContent = innerWidth + ' × ' + innerHeight
+  addEventListener('resize', r); r()
+</script>

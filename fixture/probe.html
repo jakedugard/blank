@@ -1,0 +1,67 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>stage probe</title>
+<style>
+  /* the scrollbar suppression we'll eventually inject into every frame */
+  html { scrollbar-width: none; }
+  html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+
+  :root { --ink:#141412; --paper:#f4f2ed; --rule:#c9c5bb; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  /* 1px edge rules — if any of these are clipped, the viewport is wrong */
+  .edge { position: fixed; background: #d0402c; z-index: 9; }
+  .edge.t { top:0; left:0; right:0; height:1px; }
+  .edge.b { bottom:0; left:0; right:0; height:1px; }
+  .edge.l { top:0; bottom:0; left:0; width:1px; }
+  .edge.r { top:0; bottom:0; right:0; width:1px; }
+
+  .readout {
+    position: fixed; inset: 0; display: grid; place-content: center;
+    text-align: center; pointer-events: none;
+  }
+  .dims { font-size: 64px; letter-spacing: -0.03em; font-weight: 500; }
+  .meta { margin-top: 12px; color: #6b675e; }
+  .meta b { color: var(--ink); font-weight: 500; }
+
+  .ruler { height: 320vh; padding-top: 100vh; }
+  .band {
+    height: 200px; margin: 0 40px 2px; border-top: 1px solid var(--rule);
+    display: flex; align-items: flex-start; padding-top: 8px; color:#6b675e;
+  }
+</style>
+
+<div class="edge t"></div><div class="edge b"></div>
+<div class="edge l"></div><div class="edge r"></div>
+
+<div class="readout">
+  <div class="dims" id="dims">—</div>
+  <div class="meta">
+    dpr <b id="dpr">—</b> &nbsp;·&nbsp; outer <b id="outer">—</b>
+    &nbsp;·&nbsp; scroll <b id="scroll">0</b>
+  </div>
+</div>
+
+<div class="ruler" id="ruler"></div>
+
+<script>
+  const ruler = document.getElementById('ruler')
+  for (let i = 1; i <= 12; i++) {
+    const b = document.createElement('div')
+    b.className = 'band'
+    b.textContent = String(i * 200).padStart(5, '0') + ' px'
+    ruler.appendChild(b)
+  }
+  const report = () => {
+    dims.textContent = innerWidth + ' × ' + innerHeight
+    dpr.textContent = devicePixelRatio
+    outer.textContent = outerWidth + ' × ' + outerHeight
+  }
+  addEventListener('resize', report)
+  addEventListener('scroll', () => { scroll.textContent = Math.round(scrollY) })
+  report()
+</script>
