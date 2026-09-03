@@ -4,9 +4,12 @@
   "description": "A clean stage for capturing web work",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-packager . Stage --platform=darwin --arch=arm64 --out=dist --overwrite --ignore='^/dist' --ignore='^/fixture' --ignore='^/\\.git'"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "electron": "^44.1.1"
-  }
+  },
+  "productName": "Stage"
 }

@@ -33,7 +33,8 @@
 
   .field { flex:1; min-width:0; display:flex; align-items:center; gap:7px; }
   input {
-    flex:1; min-width:0; all:unset; font:12.5px var(--font);
+    all:unset;                         /* first, or it undoes the flex below */
+    flex:1; min-width:0; font:12.5px var(--font);
     color:var(--ink); text-overflow:ellipsis;
   }
   input::placeholder { color:var(--faint); }
@@ -47,7 +48,17 @@
   .btn:hover { background:var(--sunk); color:var(--ink); }
   input::selection { background:rgba(255,255,255,.22); }
   .btn.over { color:var(--accent); }
+  .btn.live { color:var(--accent); }
+  .btn[hidden] { display:none; }       /* display:flex above would otherwise win */
   .btn.more { letter-spacing:.06em; }
+
+  .num { cursor:text; gap:6px; }
+  .num svg { cursor:ew-resize; flex:none; }
+  .num input {
+    all:unset; width:2.4ch; text-align:right; font:12px var(--font);
+    color:inherit; font-variant-numeric:tabular-nums; cursor:text;
+  }
+  .num:focus-within { background:var(--sunk); color:var(--ink); }
 </style>
 
 <div class="bar" id="bar">
@@ -56,13 +67,17 @@
            placeholder="Drop a file or folder, or paste a URL">
   </div>
 
+  <button class="btn" id="scroll" hidden
+          title="Auto-scroll · ⌥↓ down · ⌥↑ up · hold P to pause · esc stops">— px/s</button>
   <button class="btn" id="size">— × —</button>
-  <button class="btn" id="radius" title="Corner radius">
-    <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
+  <!-- Corner radius is a number, so it's edited as one: click to type,
+       drag the icon to scrub, ↑↓ to step (⇧ for tens). -->
+  <label class="btn num" id="radius" title="Corner radius · drag icon to scrub · ↑↓ to step">
+    <svg id="radiusGrip" width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
       <path d="M10.5 0.5 H4.5 A4 4 0 0 0 0.5 4.5 V10.5"
             fill="none" stroke="currentColor" stroke-width="1.2"/>
-    </svg><span id="radiusVal">0</span>
-  </button>
+    </svg><input id="radiusIn" inputmode="numeric" spellcheck="false" autocomplete="off" value="0">
+  </label>
   <button class="btn more" id="more">•••</button>
 </div>
 
@@ -70,7 +85,7 @@
   const $ = (id) => document.getElementById(id)
   const barEl = $('bar'), input = $('input')
   let state = null
-  let customMode = null        // 'size' | 'radius' when the input is capturing a value
+  let customMode = null        // 'size' | 'scroll:<key>' while the input captures a value
   let editing = false
 
   const back = () => stage.focusStage()
@@ -83,7 +98,7 @@
   // --- drag: anywhere on the bar that isn't a control -----------------------
   barEl.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return
-    if (e.target.closest('input, button')) return   // let controls be controls
+    if (e.target.closest('input, button, label')) return   // let controls be controls
 
     e.preventDefault()
     barEl.setPointerCapture(e.pointerId)
@@ -116,9 +131,11 @@
     if (customMode === 'size') {
       const m = v.match(/(\d{2,5})\s*[x×,\s]\s*(\d{2,5})/)
       if (m) stage.setSize({ w: +m[1], h: +m[2] })
-    } else if (customMode === 'radius') {
-      const m = v.match(/(\d{1,3})/)
-      if (m) stage.setRadius(+m[1])
+    } else if (customMode && customMode.startsWith('scroll:')) {
+      const key = customMode.slice(7)
+      const n = parseFloat(v)
+      // Pre-roll is asked for in seconds; the other two are already in their unit.
+      if (Number.isFinite(n)) stage.setScroll({ [key]: key === 'preroll' ? n * 1000 : n })
     } else if (/^(\/|~|\.\/)/.test(v)) {
       stage.openPath(v)
     } else {
@@ -140,13 +157,56 @@
   })
 
   // --- controls -------------------------------------------------------------
+  $('scroll').onclick = () => stage.scrollMenu()
   $('size').onclick = () => stage.sizeMenu()
-  $('radius').onclick = () => stage.radiusMenu()
+
+  // --- corner radius: an inline number ---------------------------------------
+  const radiusIn = $('radiusIn')
+  let radiusPending = 0
+  const commitRadius = (n) => {
+    n = Math.max(0, Math.min(120, Math.round(n) || 0))
+    radiusIn.value = n
+    // Scrubbing fires per pointer move; one round trip per frame is plenty.
+    cancelAnimationFrame(radiusPending)
+    radiusPending = requestAnimationFrame(() => stage.setRadius(n))
+  }
+  radiusIn.addEventListener('focus', () => { editing = true; radiusIn.select() })
+  radiusIn.addEventListener('blur', () => { editing = false; commitRadius(parseInt(radiusIn.value, 10)) })
+  radiusIn.addEventListener('keydown', (e) => {
+    const cur = parseInt(radiusIn.value, 10) || 0
+    const step = e.shiftKey ? 10 : 1
+    if (e.key === 'ArrowUp') { e.preventDefault(); commitRadius(cur + step) }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); commitRadius(cur - step) }
+    else if (e.key === 'Enter') { commitRadius(cur); radiusIn.blur(); back() }
+    else if (e.key === 'Escape') { radiusIn.value = state ? state.radius : cur; radiusIn.blur(); back() }
+  })
+  $('radiusGrip').addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()                     // not a bar drag
+    const grip = e.currentTarget
+    grip.setPointerCapture(e.pointerId)
+    const ox = e.screenX
+    const base = parseInt(radiusIn.value, 10) || 0
+    const move = (ev) => commitRadius(base + Math.round((ev.screenX - ox) / 2))
+    const up = () => {
+      grip.removeEventListener('pointermove', move)
+      grip.removeEventListener('pointerup', up)
+      grip.removeEventListener('pointercancel', up)
+    }
+    grip.addEventListener('pointermove', move)
+    grip.addEventListener('pointerup', up)
+    grip.addEventListener('pointercancel', up)
+  })
   $('more').onclick = () => stage.moreMenu()
 
   stage.onFocusInput(() => input.focus())
   stage.onCustomSize(() => askFor('size', 'Custom size — e.g. 1512 × 982'))
-  stage.onCustomRadius(() => askFor('radius', 'Corner radius in px — e.g. 18'))
+  stage.onCustomScroll((key) => askFor('scroll:' + key, {
+    speed: 'Scroll speed in px/s — e.g. 120',
+    ease: 'Easing ramp in ms — e.g. 600',
+    preroll: 'Pre-roll in seconds — e.g. 2'
+  }[key]))
 
   function askFor (mode, placeholder) {
     customMode = mode
@@ -166,10 +226,12 @@
       input.value = t ? (t.url || '') : ''
     }
 
-    $('radius').hidden = !s.radiusUI
-    if (typeof s.radius === 'number') $('radiusVal').textContent = s.radius
+    $('radius').hidden = !s.features.radius
+    if (typeof s.radius === 'number' && document.activeElement !== radiusIn) radiusIn.value = s.radius
+    renderScroll(s)
 
     const size = $('size')
+    size.hidden = !s.size
     if (s.size) {
       size.textContent = `${s.size.w} × ${s.size.h}`
       const over = s.size.w > s.maxFit.w || s.size.h > s.maxFit.h
@@ -177,6 +239,37 @@
       size.title = over
         ? `Exceeds this display (${s.maxFit.w} × ${s.maxFit.h}) — a screen recording will clip it`
         : 'Change size'
+    }
+  }
+
+  // The scroll readout counts down through the pre-roll, then shows direction
+  // and speed while the page is moving. Idle it's just the speed setting.
+  let countdown = null
+  function renderScroll (s) {
+    const b = $('scroll')
+    const st = s.scrolling
+    const sc = s.scroll
+    clearInterval(countdown)
+    b.hidden = !s.features.scroll || !s.target || !sc
+    if (b.hidden) return
+
+    const live = !!(st && st.active)
+    const arrow = st && st.dir < 0 ? '↑' : '↓'
+    b.classList.toggle('live', live)
+
+    if (live && st.phase === 'preroll') {
+      const tickDown = () => {
+        const left = Math.max(0, st.until - Date.now())
+        b.textContent = `${arrow} in ${(left / 1000).toFixed(1)} s`
+      }
+      tickDown()
+      countdown = setInterval(tickDown, 100)
+    } else if (live && st.phase === 'paused') {
+      b.textContent = `${arrow} paused`
+    } else if (live) {
+      b.textContent = `${arrow} ${sc.speed} px/s`
+    } else {
+      b.textContent = `${sc.speed} px/s`
     }
   }
 </script>

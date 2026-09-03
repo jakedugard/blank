@@ -10,10 +10,12 @@ const { TargetStore } = require('./src/targets')
 // INSET is that transparent margin; gap is measured from the visible edge.
 const BAR = { w: 560, h: 46, gap: 14 }
 
-// Corner radius is hidden until the reset-to-0 problem is solved: setting a
-// non-zero radius works, but going back to 0 leaves the old clip in place.
-// Flip to true to bring the control back; the plumbing below is intact.
-const RADIUS_UI = false
+// Parked features. The code stays wired; these just keep it out of the UI.
+// scroll: not needed for a clean window yet.
+const FEATURES = { radius: true, scroll: false }
+
+// Auto-scroll defaults for targets that predate the setting.
+const SCROLL_DEFAULTS = { speed: 90, ease: 600, preroll: 2000 }
 
 let stage = null   // the window
 let view = null    // the page inside it, clipped to the corner radius
@@ -45,7 +47,10 @@ function createStage () {
     // rather than painting a square of background around it.
     transparent: true,
     backgroundColor: '#00000000',
-    hasShadow: true,
+    // No shadow and no macOS corner rounding: the shadow paints a rim line
+    // around the page, and the recorder does its own corners.
+    hasShadow: false,
+    roundedCorners: false,
     show: false
   })
 
@@ -60,19 +65,16 @@ function createStage () {
   })
   stage.contentView.addChildView(view)
   layoutView()
-  applyRadius(store.radius())
+  applyRadius(FEATURES.radius ? store.radius() : 0)
+  if (FEATURES.scroll) hookScrollEvents(view.webContents)
 
   // Belt and braces: frame:false should already omit them, but be explicit.
   try { stage.setWindowButtonVisibility(false) } catch { /* not applicable */ }
 
-  // 'ready-to-show' fires for a window's OWN webContents, and this window
-  // doesn't have one any more — the page lives in the child view. Show once
-  // the view paints, with an immediate fallback so a failed load can't leave
-  // the window invisible.
-  view.webContents.once('did-finish-load', () => { if (stage && !stage.isDestroyed()) stage.show() })
-  setTimeout(() => { if (stage && !stage.isDestroyed() && !stage.isVisible()) stage.show() }, 1500)
-  stage.on('move', () => { if (!dragging) positionBar() })
-  stage.on('resize', () => { layoutView(); if (!dragging) positionBar() })
+  // There is no start screen. The stage only exists while a target is loaded;
+  // with nothing open, the bar is the whole app.
+  stage.on('move', () => { if (!dragging && stage.isVisible()) positionBar() })
+  stage.on('resize', () => { layoutView(); if (!dragging && stage.isVisible()) positionBar() })
   stage.on('closed', () => {
     stage = null
     view = null
@@ -87,8 +89,22 @@ function createStage () {
     shell.openExternal(url)
     return { action: 'deny' }
   })
+}
 
-  showLauncher()
+// Bring the stage up centred on whichever display the bar is on, so opening
+// a target from a bar you've parked somewhere puts the page next to it.
+function showStage () {
+  if (!stage || stage.isDestroyed() || stage.isVisible()) return
+  const anchor = bar && !bar.isDestroyed() ? bar.getBounds() : stage.getBounds()
+  const work = screen.getDisplayMatching(anchor).workArea
+  const [w, h] = stage.getSize()
+  stage.setPosition(
+    Math.round(work.x + (work.width - w) / 2),
+    Math.round(work.y + Math.max(0, (work.height - h - BAR.h - BAR.gap) / 2)),
+    false
+  )
+  stage.show()
+  positionBar()
 }
 
 function layoutView () {
@@ -97,20 +113,21 @@ function layoutView () {
   view.setBounds({ x: 0, y: 0, width: w, height: h })
 }
 
+// Verified on Electron 44 / macOS 26.6.2: setBorderRadius() alone is not
+// enough. Once the radius has been set to 0, the next bounds change (a size
+// preset, even a one-pixel nudge) leaves the view's layer deaf to every later
+// setBorderRadius — the value is stored but never reaches the compositor.
+// Re-attaching the view runs Electron's OnViewAddedToWidget, which pushes the
+// stored radius to a fresh layer. It's cheap: no reload, scroll and focus
+// survive, and it costs at most a frame.
 function applyRadius (r) {
   if (!view || !stage || stage.isDestroyed()) return
   const px = Math.max(0, Math.round(r || 0))
   try {
     view.setBorderRadius(px)
-
-    // Setting the same bounds is a no-op, so the existing corner clip survives
-    // — going 40 -> 0 left the view still rounded. Nudge the height by a pixel
-    // and back to force a genuine relayout that rebuilds the clip.
-    const [w, h] = stage.getContentSize()
-    view.setBounds({ x: 0, y: 0, width: w, height: Math.max(1, h - 1) })
-    view.setBounds({ x: 0, y: 0, width: w, height: h })
-
-    console.log('[stage] applied border radius:', px)
+    stage.contentView.removeChildView(view)
+    stage.contentView.addChildView(view)
+    layoutView()
   } catch (e) {
     console.log('[stage] setBorderRadius failed:', e.message)
   }
@@ -146,8 +163,13 @@ function createBar () {
   // Verified on macOS 26.6.2: omits this window from ScreenCaptureKit entirely.
   bar.setContentProtection(true)
 
+  if (FEATURES.scroll) hookScrollEvents(bar.webContents)
   bar.loadFile(path.join(__dirname, 'ui', 'bar.html'))
-  bar.once('ready-to-show', () => { bar.showInactive(); positionBar(); pushState() })
+  bar.once('ready-to-show', () => {
+    stage && stage.isVisible() ? positionBar() : centerBar()
+    bar.showInactive()
+    pushState()
+  })
 }
 
 // Centered under the stage, flipping above when there's no room below.
@@ -166,7 +188,19 @@ function barBoundsFor (s) {
 
 function positionBar () {
   if (!stage || !bar || stage.isDestroyed() || bar.isDestroyed()) return
+  if (!stage.isVisible()) return           // nothing to tether to; stay put
   bar.setBounds(barBoundsFor(stage.getBounds()))
+}
+
+// With no stage, the bar sits in the middle of the display you're on.
+function centerBar () {
+  if (!bar || bar.isDestroyed()) return
+  const work = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+  bar.setBounds({
+    x: Math.round(work.x + (work.width - BAR.w) / 2),
+    y: Math.round(work.y + (work.height - BAR.h) / 2),
+    width: BAR.w, height: BAR.h
+  })
 }
 
 // --- scrollbars -------------------------------------------------------------
@@ -229,11 +263,12 @@ async function loadTarget (target, source, { keepScroll = false } = {}) {
     url = target.liveUrl
   }
 
-  if (!url) { showLauncher(); return }
+  if (!url) { closeTarget(); return }
 
   applySize(target.size, { save: false })
   await view.webContents.loadURL(url).catch(() => {})
   if (keepScroll && y) restoreScroll(y)
+  showStage()
 
   store.touch(target.id)
   store.update(target.id, { source })
@@ -256,10 +291,12 @@ function restoreScroll (y) {
   view.webContents.on('did-finish-load', once)
 }
 
-function showLauncher () {
+function closeTarget () {
   current.target = null
   teardownSource()
-  view.webContents.loadFile(path.join(__dirname, 'ui', 'launcher.html'))
+  if (stage && !stage.isDestroyed()) stage.hide()
+  if (view) view.webContents.loadURL('about:blank').catch(() => {})
+  centerBar()
   pushState()
 }
 
@@ -290,12 +327,14 @@ function pushState () {
   const payload = {
     target: t ? { id: t.id, name: t.name, url: addressOf(t, current.source) } : null,
     liveReload: current.liveReload,
-    size: stage && !stage.isDestroyed()
+    size: stage && !stage.isDestroyed() && stage.isVisible()
       ? { w: stage.getContentSize()[0], h: stage.getContentSize()[1] }
       : null,
     presets: PRESETS,
     radius: store.radius(),
-    radiusUI: RADIUS_UI,
+    features: FEATURES,
+    scroll: scrollSettings(),
+    scrolling: scrollState,
     maxFit: { w: work.width, h: work.height },
     recents: store.all().slice(0, 8).map(r => ({ id: r.id, name: r.name }))
   }
@@ -336,6 +375,104 @@ async function pickTarget () {
   if (!r.canceled && r.filePaths[0]) openPath(r.filePaths[0])
 }
 
+// --- auto-scroll ------------------------------------------------------------
+// The motion itself runs in the page's preload (see ui/preload.js); main owns
+// the settings, the shortcuts, and the last phase the engine reported.
+
+let scrollState = null
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
+
+function scrollSettings () {
+  const s = (current.target && current.target.scroll) || {}
+  // The first targets stored a named easing; map it onto a ramp duration.
+  const ease = Number.isFinite(s.ease) ? s.ease
+    : ({ none: 0, gentle: 600, soft: 1200 }[s.easing] ?? SCROLL_DEFAULTS.ease)
+  return {
+    speed: Number.isFinite(s.speed) ? s.speed : SCROLL_DEFAULTS.speed,
+    ease,
+    preroll: Number.isFinite(s.preroll) ? s.preroll : SCROLL_DEFAULTS.preroll
+  }
+}
+
+function setScroll (patch) {
+  if (!current.target) return
+  const n = { ...scrollSettings(), ...patch }
+  store.update(current.target.id, {
+    scroll: {
+      speed: clamp(Math.round(n.speed) || SCROLL_DEFAULTS.speed, 5, 2000),
+      ease: clamp(Math.round(n.ease) || 0, 0, 10000),
+      preroll: clamp(Math.round(n.preroll) || 0, 0, 30000)
+    }
+  })
+  pushState()
+}
+
+function scrollCmd (cmd, extra = {}) {
+  if (!view || !current.target || view.webContents.isDestroyed()) return
+  view.webContents.send('scroll:cmd', { cmd, ...scrollSettings(), ...extra })
+}
+
+// ⌥↓ while already scrolling down stops; ⌥↑ mid-run turns around.
+function startScroll (dir) {
+  if (scrollState && scrollState.active && scrollState.dir === dir) scrollCmd('stop')
+  else scrollCmd('start', { dir })
+}
+
+function hookScrollEvents (wc) {
+  wc.on('before-input-event', (e, input) => {
+    const plain = !input.meta && !input.control
+    if (input.alt && plain && (input.key === 'ArrowDown' || input.key === 'ArrowUp')) {
+      e.preventDefault()
+      if (input.type === 'keyDown' && !input.isAutoRepeat) startScroll(input.key === 'ArrowDown' ? 1 : -1)
+      return
+    }
+
+    // Esc stops. Hold-P lives in the preload: preventing a keyDown here
+    // swallows its keyUp too, so main can never see the key released.
+    if (scrollState && scrollState.active && input.key === 'Escape' && input.type === 'keyDown') {
+      e.preventDefault()
+      scrollCmd('stop')
+    }
+  })
+
+  // A full navigation replaces the preload world, and the engine with it.
+  wc.on('did-navigate', () => { scrollState = null; pushState() })
+}
+
+ipcMain.on('scroll:state', (e, st) => {
+  if (!view || e.sender !== view.webContents) return
+  scrollState = st
+  pushState()
+})
+
+function scrollSubmenu () {
+  const s = scrollSettings()
+  const t = current.target
+  const active = !!(scrollState && scrollState.active)
+
+  const pick = (values, key, fmt) => values.map(v => ({
+    label: fmt(v), type: 'checkbox', checked: s[key] === v, click: () => setScroll({ [key]: v })
+  })).concat({ type: 'separator' }, {
+    label: 'Custom…', click: () => bar && bar.webContents.send('custom-scroll', key)
+  })
+
+  return [
+    { label: 'Scroll Down    ⌥↓', enabled: !!t, click: () => startScroll(1) },
+    { label: 'Scroll Up    ⌥↑', enabled: !!t, click: () => startScroll(-1) },
+    { label: 'Stop    esc', enabled: active, click: () => scrollCmd('stop') },
+    { label: 'Hold P to pause', enabled: false },
+    { type: 'separator' },
+    { label: `Speed: ${s.speed} px/s`, submenu: pick([30, 60, 90, 120, 180, 240, 360], 'speed', v => `${v} px/s`) },
+    { label: `Easing: ${s.ease ? s.ease + ' ms' : 'None'}`, submenu: pick([0, 300, 600, 1200, 2000], 'ease', v => v ? `${v} ms` : 'None') },
+    { label: `Pre-roll: ${s.preroll ? s.preroll / 1000 + ' s' : 'None'}`, submenu: pick([0, 1000, 2000, 3000, 5000], 'preroll', v => v ? `${v / 1000} s` : 'None') }
+  ]
+}
+
+function popupScrollMenu () {
+  Menu.buildFromTemplate(scrollSubmenu()).popup({ window: bar })
+}
+
 // --- menus ------------------------------------------------------------------
 
 function buildMenu () {
@@ -345,10 +482,16 @@ function buildMenu () {
       label: 'Stage',
       submenu: [
         { label: 'Open…', accelerator: 'Cmd+O', click: pickTarget },
-        { label: 'Close Target', accelerator: 'Cmd+Shift+W', click: showLauncher },
+        { label: 'Close Target', accelerator: 'Cmd+Shift+W', click: closeTarget },
         { type: 'separator' },
         { label: 'Reload', accelerator: 'Cmd+R', click: () => view && view.webContents.reload() },
         { type: 'separator' },
+        ...(FEATURES.scroll ? [
+          { label: 'Scroll Down    ⌥↓', click: () => startScroll(1) },
+          { label: 'Scroll Up    ⌥↑', click: () => startScroll(-1) },
+          { label: 'Stop Scrolling    esc', click: () => scrollCmd('stop') },
+          { type: 'separator' }
+        ] : []),
         {
           label: 'Focus Bar',
           accelerator: 'Cmd+K',
@@ -399,32 +542,9 @@ function popupSizeMenu () {
   Menu.buildFromTemplate(items).popup({ window: bar })
 }
 
-function radiusSubmenu () {
-  const cur = store.radius()
-  const items = [0, 6, 10, 14, 18, 24, 32].map(r => ({
-    label: r === 0 ? 'Square' : `${r} px`,
-    type: 'checkbox',
-    checked: cur === r,
-    click: () => setRadius(r)
-  }))
-  items.push({ type: 'separator' }, {
-    label: 'Custom…',
-    click: () => bar && bar.webContents.send('custom-radius')
-  })
-  return items
-}
-
 function setRadius (r) {
   applyRadius(store.setRadius(r))
   pushState()
-}
-
-function popupRadiusMenu () {
-  Menu.buildFromTemplate([
-    { label: `Current: ${store.radius()} px`, enabled: false },
-    { type: 'separator' },
-    ...radiusSubmenu()
-  ]).popup({ window: bar })
 }
 
 function popupMoreMenu () {
@@ -442,14 +562,15 @@ function popupMoreMenu () {
     },
     { label: 'Reload now', accelerator: 'Cmd+R', click: () => view && view.webContents.reload() },
     { type: 'separator' },
-    ...(RADIUS_UI ? [{ label: 'Corner Radius', submenu: radiusSubmenu() }, { type: 'separator' }] : []),
+    ...(FEATURES.scroll ? [{ label: 'Auto-scroll', submenu: scrollSubmenu() }] : []),
+    ...(FEATURES.scroll ? [{ type: 'separator' }] : []),
     { label: 'Open File or Folder…', accelerator: 'Cmd+O', click: pickTarget },
-    { label: 'Close Target', enabled: !!t, click: showLauncher },
+    { label: 'Close Target', enabled: !!t, click: closeTarget },
     { type: 'separator' },
     {
       label: 'Forget This Target',
       enabled: !!t,
-      click: () => { store.remove(t.id); showLauncher() }
+      click: () => { store.remove(t.id); closeTarget() }
     },
     { label: 'Hide Bar', accelerator: 'Cmd+.', click: () => bar && bar.hide() }
   ]).popup({ window: bar })
@@ -468,9 +589,11 @@ ipcMain.handle('stage:openRecent', (_e, id) => {
 })
 ipcMain.handle('stage:setRadius', (_e, r) => setRadius(r))
 ipcMain.handle('stage:sizeMenu', popupSizeMenu)
-ipcMain.handle('stage:radiusMenu', popupRadiusMenu)
 ipcMain.handle('stage:moreMenu', popupMoreMenu)
-ipcMain.handle('stage:focusStage', () => stage && stage.focus())
+ipcMain.handle('stage:scrollMenu', popupScrollMenu)
+ipcMain.handle('stage:setScroll', (_e, patch) => setScroll(patch || {}))
+ipcMain.handle('stage:scroll', (_e, dir) => startScroll(dir < 0 ? -1 : 1))
+ipcMain.handle('stage:focusStage', () => stage && stage.isVisible() && stage.focus())
 
 // Manual drag: both windows move from a recorded origin plus the pointer delta,
 // so there's no accumulated drift and no tether fighting the gesture.
@@ -525,14 +648,19 @@ app.whenReady().then(async () => {
   createBar()
 
   const cli = cliArgs(process.argv)
-  if (Number.isFinite(cli.radius)) setRadius(cli.radius)
+  if (FEATURES.radius && Number.isFinite(cli.radius)) setRadius(cli.radius)
 
+  // Nothing opens on its own: a plain launch is just the bar.
   const first = pendingOpen || cli.target
-  if (first) {
-    /^https?:\/\//i.test(first) ? await openUrl(first) : await openPath(first)
-  } else {
-    const last = store.last()
-    if (last) await loadTarget(last, last.source || (last.localPath ? 'local' : 'live'))
+  if (first) /^https?:\/\//i.test(first) ? await openUrl(first) : await openPath(first)
+
+  // Dev hook: STAGE_PROBE=script.js hands a script the live internals.
+  if (process.env.STAGE_PROBE) {
+    require(path.resolve(process.env.STAGE_PROBE))({
+      stage: () => stage, view: () => view, bar: () => bar,
+      startScroll, scrollCmd, setScroll, setRadius, applySize, openPath, closeTarget, storeRadius: () => store.radius(),
+      scrollState: () => scrollState
+    })
   }
 })
 
