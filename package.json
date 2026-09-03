@@ -1,15 +1,16 @@
 {
-  "name": "stage",
+  "name": "blank",
   "version": "0.0.1",
-  "description": "A clean stage for capturing web work",
+  "description": "A blank window for capturing web work",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-packager . Stage --platform=darwin --arch=arm64 --out=dist --overwrite --ignore='^/dist' --ignore='^/fixture' --ignore='^/\\.git'"
+    "build": "electron-packager . Blank --platform=darwin --arch=arm64 --out=dist --overwrite --icon=build/icon.icns --ignore='^/dist' --ignore='^/fixture' --ignore='^/\\.git' --ignore='^/build'",
+    "install-app": "npm run build && rm -rf /Applications/Blank.app && cp -R dist/Blank-darwin-arm64/Blank.app /Applications/Blank.app"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
     "electron": "^44.1.1"
   },
-  "productName": "Stage"
+  "productName": "Blank"
 }

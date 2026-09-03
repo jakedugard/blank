@@ -481,7 +481,7 @@ function buildMenu () {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'appMenu' },
     {
-      label: 'Stage',
+      label: 'Blank',
       submenu: [
         { label: 'Open…', accelerator: 'Cmd+O', click: pickTarget },
         { label: 'Close Target', accelerator: 'Cmd+Shift+W', click: closeTarget },
@@ -504,7 +504,7 @@ function buildMenu () {
             bar.webContents.send('focus-input')
           }
         },
-        { label: 'Hide Stage', accelerator: 'Cmd+.', click: hideRig }
+        { label: 'Hide Blank', accelerator: 'Cmd+.', click: hideRig }
       ]
     },
     { role: 'editMenu' },
@@ -567,12 +567,12 @@ function popupMoreMenu () {
       enabled: !!t,
       click: () => { store.remove(t.id); closeTarget() }
     },
-    { label: 'Hide Stage', accelerator: 'Cmd+.', click: hideRig }
+    { label: 'Hide Blank', accelerator: 'Cmd+.', click: hideRig }
   ]).popup({ window: bar })
 }
 
 // --- menu bar ---------------------------------------------------------------
-// Stage lives in the menu bar, not the Dock. Click the icon to summon the rig
+// Blank lives in the menu bar, not the Dock. Click the icon to summon the rig
 // or put it away; right-click for the few things that aren't in the bar.
 
 function rigVisible () {
@@ -604,7 +604,7 @@ function trayMenu () {
   const t = current.target
   const login = app.isPackaged ? app.getLoginItemSettings().openAtLogin : false
   return Menu.buildFromTemplate([
-    { label: rigVisible() ? 'Hide Stage' : 'Show Stage', click: toggleRig },
+    { label: rigVisible() ? 'Hide Blank' : 'Show Blank', click: toggleRig },
     { type: 'separator' },
     { label: 'Open File or Folder…', click: () => { showRig(); pickTarget() } },
     { label: t ? `Close ${t.name}` : 'Close Target', enabled: !!t, click: closeTarget },
@@ -617,7 +617,7 @@ function trayMenu () {
       click: (mi) => app.setLoginItemSettings({ openAtLogin: mi.checked })
     },
     { type: 'separator' },
-    { label: 'Quit Stage', accelerator: 'Cmd+Q', click: () => app.quit() }
+    { label: 'Quit Blank', accelerator: 'Cmd+Q', click: () => app.quit() }
   ])
 }
 
@@ -625,7 +625,7 @@ function createTray () {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'ui', 'tray', 'iconTemplate.png'))
   icon.setTemplateImage(true)
   tray = new Tray(icon)
-  tray.setToolTip('Stage')
+  tray.setToolTip('Blank')
   tray.on('click', toggleRig)
   tray.on('right-click', () => tray.popUpContextMenu(trayMenu()))
 }
