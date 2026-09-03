@@ -8,10 +8,12 @@
     --font:-apple-system, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
     /* Dark wash over the window's native blur. The blur backdrop can be
        anything up to pure white, so the wash is set for that worst case:
-       at 86% the ink reads 4.8:1 and the dim text 4.5:1 (WCAG AA) on white;
-       darker desktops only improve it. */
-    --ink:#f4f2ee; --dim:rgba(255,255,255,.8);
-    --bar:rgba(20,19,17,.86); --bar-hot:rgba(44,42,39,.9);
+       60% black on white gives the ink 5.1:1 and the dim text 4.6:1 (WCAG
+       AA); darker desktops only improve it. Black rather than a warm
+       near-black because at 60% the tint would be lost anyway and black
+       buys the contrast back. */
+    --ink:#f4f2ee; --dim:rgba(255,255,255,.84);
+    --bar:rgba(0,0,0,.6); --bar-hot:rgba(20,20,20,.7);
     --rule:rgba(255,255,255,.07); --accent:#ff8a72;
   }
   * { box-sizing:border-box; }
