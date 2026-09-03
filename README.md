@@ -21,6 +21,10 @@ There is no start screen. With nothing open, the bar is the whole app: drop a
 file or folder on it, paste a URL, or ⌘O. The stage appears when a target
 loads and goes away with ⌘⇧W.
 
+Stage lives in the menu bar, not the Dock. Click the icon to summon the rig
+or put it away (⌘. does the same); right-click for Open, Close, Launch at
+Login and Quit. Hiding is not quitting — the tray keeps it alive.
+
 ## Two things verified on macOS 26.6.2
 
 - `setContentProtection(true)` genuinely omits the panel from ScreenCaptureKit —
@@ -60,7 +64,7 @@ rather than the document get the largest scrollable element.
 
 ## Shortcuts
 
-| ⌘O | open | ⌘K | focus bar | ⌘R | reload | ⌘⇧W | close target | ⌘. | hide bar |
+| ⌘O | open | ⌘K | focus bar | ⌘R | reload | ⌘⇧W | close target | ⌘. | hide |
 
 With auto-scroll on: ⌥↓ down, ⌥↑ up, hold P to pause, esc to stop.
 

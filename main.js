@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, screen, Menu, shell } = require('electron')
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, screen, Menu, Tray, nativeImage, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 
@@ -20,6 +20,7 @@ const SCROLL_DEFAULTS = { speed: 90, ease: 600, preroll: 2000 }
 let stage = null   // the window
 let view = null    // the page inside it, clipped to the corner radius
 let bar = null
+let tray = null
 let store = null
 
 // Suppresses the bar-follows-stage tether while the user is dragging the rig,
@@ -357,6 +358,7 @@ async function openPath (p) {
   if (!p || !fs.existsSync(p)) return
   const t = store.upsert({ localPath: path.resolve(p) })
   await loadTarget(t, 'local')
+  if (bar && !bar.isDestroyed() && !bar.isVisible()) bar.showInactive()
 }
 
 async function openUrl (raw) {
@@ -497,19 +499,12 @@ function buildMenu () {
           accelerator: 'Cmd+K',
           click: () => {
             if (!bar || bar.isDestroyed()) return
-            if (!bar.isVisible()) bar.showInactive()
+            if (!bar.isVisible()) showRig()
             bar.focus()
             bar.webContents.send('focus-input')
           }
         },
-        {
-          label: 'Toggle Bar',
-          accelerator: 'Cmd+.',
-          click: () => {
-            if (!bar || bar.isDestroyed()) return
-            bar.isVisible() ? bar.hide() : bar.showInactive()
-          }
-        }
+        { label: 'Hide Stage', accelerator: 'Cmd+.', click: hideRig }
       ]
     },
     { role: 'editMenu' },
@@ -572,8 +567,67 @@ function popupMoreMenu () {
       enabled: !!t,
       click: () => { store.remove(t.id); closeTarget() }
     },
-    { label: 'Hide Bar', accelerator: 'Cmd+.', click: () => bar && bar.hide() }
+    { label: 'Hide Stage', accelerator: 'Cmd+.', click: hideRig }
   ]).popup({ window: bar })
+}
+
+// --- menu bar ---------------------------------------------------------------
+// Stage lives in the menu bar, not the Dock. Click the icon to summon the rig
+// or put it away; right-click for the few things that aren't in the bar.
+
+function rigVisible () {
+  return !!(bar && !bar.isDestroyed() && bar.isVisible())
+}
+
+function showRig () {
+  if (!bar || bar.isDestroyed()) return
+  if (current.target && stage && !stage.isDestroyed()) {
+    stage.show()
+    positionBar()
+  } else {
+    centerBar()
+  }
+  bar.showInactive()
+  bar.focus()
+}
+
+function hideRig () {
+  if (stage && !stage.isDestroyed()) stage.hide()
+  if (bar && !bar.isDestroyed()) bar.hide()
+}
+
+function toggleRig () {
+  rigVisible() ? hideRig() : showRig()
+}
+
+function trayMenu () {
+  const t = current.target
+  const login = app.isPackaged ? app.getLoginItemSettings().openAtLogin : false
+  return Menu.buildFromTemplate([
+    { label: rigVisible() ? 'Hide Stage' : 'Show Stage', click: toggleRig },
+    { type: 'separator' },
+    { label: 'Open File or Folder…', click: () => { showRig(); pickTarget() } },
+    { label: t ? `Close ${t.name}` : 'Close Target', enabled: !!t, click: closeTarget },
+    { type: 'separator' },
+    {
+      label: 'Launch at Login',
+      type: 'checkbox',
+      checked: login,
+      enabled: app.isPackaged,       // in dev this would register Electron itself
+      click: (mi) => app.setLoginItemSettings({ openAtLogin: mi.checked })
+    },
+    { type: 'separator' },
+    { label: 'Quit Stage', accelerator: 'Cmd+Q', click: () => app.quit() }
+  ])
+}
+
+function createTray () {
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'ui', 'tray', 'iconTemplate.png'))
+  icon.setTemplateImage(true)
+  tray = new Tray(icon)
+  tray.setToolTip('Stage')
+  tray.on('click', toggleRig)
+  tray.on('right-click', () => tray.popUpContextMenu(trayMenu()))
 }
 
 // --- ipc --------------------------------------------------------------------
@@ -643,9 +697,11 @@ function cliArgs (argv) {
 
 app.whenReady().then(async () => {
   store = new TargetStore(app.getPath('userData'))
+  if (app.dock) app.dock.hide()          // menu bar only; see createTray
   buildMenu()
   createStage()
   createBar()
+  createTray()
 
   const cli = cliArgs(process.argv)
   if (FEATURES.radius && Number.isFinite(cli.radius)) setRadius(cli.radius)
@@ -658,11 +714,11 @@ app.whenReady().then(async () => {
   if (process.env.STAGE_PROBE) {
     require(path.resolve(process.env.STAGE_PROBE))({
       stage: () => stage, view: () => view, bar: () => bar,
-      startScroll, scrollCmd, setScroll, setRadius, applySize, openPath, closeTarget, storeRadius: () => store.radius(),
+      startScroll, scrollCmd, setScroll, setRadius, applySize, openPath, closeTarget, storeRadius: () => store.radius(), toggleRig,
       scrollState: () => scrollState
     })
   }
 })
 
-app.on('window-all-closed', () => app.quit())
+app.on('window-all-closed', () => { /* the tray keeps us alive */ })
 app.on('before-quit', teardownSource)
