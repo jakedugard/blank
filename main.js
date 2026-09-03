@@ -32,8 +32,7 @@ const current = {
   target: null,
   source: 'local',
   server: null,
-  watcher: null,
-  liveReload: true
+  watcher: null
 }
 
 // --- windows ----------------------------------------------------------------
@@ -268,13 +267,12 @@ async function loadTarget (target, source, { keepScroll = false } = {}) {
     current.server = await serve(root)
     url = current.server.origin + entry
 
-    if (current.liveReload) {
-      current.watcher = watch(root, async () => {
-        const at = await getScroll()
-        view.webContents.reload()
-        restoreScroll(at)
-      })
-    }
+    // Local folders always live-reload, keeping the scroll position.
+    current.watcher = watch(root, async () => {
+      const at = await getScroll()
+      view.webContents.reload()
+      restoreScroll(at)
+    })
   } else if (source === 'live' && target.liveUrl) {
     url = target.liveUrl
   }
@@ -342,7 +340,6 @@ function pushState () {
   const t = current.target
   const payload = {
     target: t ? { id: t.id, name: t.name, url: addressOf(t, current.source) } : null,
-    liveReload: current.liveReload,
     size: stage && !stage.isDestroyed() && stage.isVisible()
       ? { w: stage.getContentSize()[0], h: stage.getContentSize()[1] }
       : null,
@@ -560,17 +557,7 @@ function setRadius (r) {
 function popupMoreMenu () {
   const t = current.target
   Menu.buildFromTemplate([
-    {
-      label: 'Reload on file change',
-      type: 'checkbox',
-      checked: current.liveReload,
-      enabled: !!(t && t.localPath),
-      click: (mi) => {
-        current.liveReload = mi.checked
-        if (t) loadTarget(t, current.source, { keepScroll: true })
-      }
-    },
-    { label: 'Reload now', accelerator: 'Cmd+R', click: () => view && view.webContents.reload() },
+    { label: 'Reload', accelerator: 'Cmd+R', enabled: !!t, click: () => view && view.webContents.reload() },
     { type: 'separator' },
     ...(FEATURES.scroll ? [{ label: 'Auto-scroll', submenu: scrollSubmenu() }] : []),
     ...(FEATURES.scroll ? [{ type: 'separator' }] : []),
