@@ -499,7 +499,7 @@ function buildMenu () {
       label: 'Blank',
       submenu: [
         { label: 'Open…', accelerator: 'Cmd+O', click: pickTarget },
-        { label: 'Close Target', accelerator: 'Cmd+Shift+W', click: closeTarget },
+        { label: 'Close Page', accelerator: 'Cmd+Shift+W', click: closeTarget },
         { type: 'separator' },
         { label: 'Reload', accelerator: 'Cmd+R', click: () => view && view.webContents.reload() },
         { type: 'separator' },
@@ -575,15 +575,9 @@ function popupMoreMenu () {
     ...(FEATURES.scroll ? [{ label: 'Auto-scroll', submenu: scrollSubmenu() }] : []),
     ...(FEATURES.scroll ? [{ type: 'separator' }] : []),
     { label: 'Open File or Folder…', accelerator: 'Cmd+O', click: pickTarget },
-    { label: 'Close Target', enabled: !!t, click: closeTarget },
+    { label: 'Close Page', accelerator: 'Cmd+Shift+W', enabled: !!t, click: closeTarget },
     { type: 'separator' },
     barCaptureItem(),
-    { type: 'separator' },
-    {
-      label: 'Forget This Target',
-      enabled: !!t,
-      click: () => { store.remove(t.id); closeTarget() }
-    },
     { label: 'Hide Blank', accelerator: 'Cmd+.', click: hideRig }
   ]).popup({ window: bar })
 }
@@ -624,7 +618,7 @@ function trayMenu () {
     { label: rigVisible() ? 'Hide Blank' : 'Show Blank', click: toggleRig },
     { type: 'separator' },
     { label: 'Open File or Folder…', click: () => { showRig(); pickTarget() } },
-    { label: t ? `Close ${t.name}` : 'Close Target', enabled: !!t, click: closeTarget },
+    { label: t ? `Close ${t.name}` : 'Close Page', enabled: !!t, click: closeTarget },
     { type: 'separator' },
     barCaptureItem(),
     {

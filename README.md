@@ -20,7 +20,7 @@ deployed a true A/B: anything that moves is a real difference.
 
 There is no start screen. With nothing open, the bar is the whole app: drop a
 file or folder on it, paste a URL, or ⌘O. The stage appears when a target
-loads and goes away with ⌘⇧W.
+loads and goes away with ⌘⇧W (Close Page).
 
 Blank lives in the menu bar, not the Dock. Click the icon to summon the rig
 or put it away (⌘. does the same); right-click for Open, Close, Launch at
@@ -67,7 +67,7 @@ rather than the document get the largest scrollable element.
 
 ## Shortcuts
 
-| ⌘O | open | ⌘K | focus bar | ⌘R | reload | ⌘⇧W | close target | ⌘. | hide |
+| ⌘O | open | ⌘K | focus bar | ⌘R | reload | ⌘⇧W | close page | ⌘. | hide |
 
 With auto-scroll on: ⌥↓ down, ⌥↑ up, hold P to pause, esc to stop.
 

@@ -226,7 +226,7 @@
       input.value = t ? (t.url || '') : ''
     }
 
-    $('radius').hidden = !s.features.radius
+    $('radius').hidden = !s.features.radius || !s.target   // nothing to round yet
     if (typeof s.radius === 'number' && document.activeElement !== radiusIn) radiusIn.value = s.radius
     renderScroll(s)
 
