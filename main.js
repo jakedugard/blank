@@ -87,7 +87,7 @@ function createStage () {
 
   // There is no start screen. The stage only exists while a target is loaded;
   // with nothing open, the bar is the whole app.
-  stage.on('move', () => { if (!dragging && stage.isVisible()) positionBar() })
+  stage.on('move', () => { if (!dragging && !settling && stage.isVisible()) positionBar() })
   stage.on('resize', () => { layoutView(); if (!dragging && stage.isVisible()) positionBar() })
   stage.on('closed', () => {
     stage = null
@@ -105,6 +105,41 @@ function createStage () {
   })
 }
 
+// --- fades ------------------------------------------------------------------
+// The stage arrives and leaves with a short fade and a few pixels of rise,
+// rather than cutting. One fade at a time per window; a new one takes over.
+
+const EASE_OUT = (t) => 1 - (1 - t) ** 3
+const fading = new WeakMap()
+let settling = false   // the stage is mid-rise; the bar shouldn't follow it
+
+function fadeWindow (win, { to, ms, rise = 0 }) {
+  return new Promise((resolve) => {
+    if (!win || win.isDestroyed()) return resolve()
+    clearInterval(fading.get(win))
+    const from = win.getOpacity()
+    const [x, y0] = win.getPosition()
+    const y = y0 + rise                      // rise > 0: we start lower and settle at y0
+    const t0 = Date.now()
+    const step = () => {
+      if (win.isDestroyed()) { clearInterval(timer); return resolve() }
+      const k = EASE_OUT(Math.min(1, (Date.now() - t0) / ms))
+      win.setOpacity(from + (to - from) * k)
+      if (rise) win.setPosition(x, Math.round(y - rise * k), false)
+      if (k >= 1) { clearInterval(timer); fading.delete(win); resolve() }
+    }
+    const timer = setInterval(step, 1000 / 60)
+    fading.set(win, timer)
+    step()
+  })
+}
+
+async function hideStage () {
+  if (!stage || stage.isDestroyed() || !stage.isVisible()) return
+  await fadeWindow(stage, { to: 0, ms: 140 })
+  if (!stage.isDestroyed()) { stage.hide(); stage.setOpacity(1) }
+}
+
 // Bring the stage up centred on whichever display the bar is on, so opening
 // a target from a bar you've parked somewhere puts the page next to it.
 function showStage () {
@@ -112,13 +147,16 @@ function showStage () {
   const anchor = bar && !bar.isDestroyed() ? bar.getBounds() : stage.getBounds()
   const work = screen.getDisplayMatching(anchor).workArea
   const [w, h] = stage.getSize()
-  stage.setPosition(
-    Math.round(work.x + (work.width - w) / 2),
-    Math.round(work.y + Math.max(0, (work.height - h - BAR.h - BAR.gap) / 2)),
-    false
-  )
+  const rise = 10
+  const x = Math.round(work.x + (work.width - w) / 2)
+  const y = Math.round(work.y + Math.max(0, (work.height - h - BAR.h - BAR.gap) / 2))
+  // The bar goes straight to where the stage will settle; only the page rises.
+  if (bar && !bar.isDestroyed()) bar.setBounds(barBoundsFor({ x, y, width: w, height: h }))
+  stage.setPosition(x, y + rise, false)
+  stage.setOpacity(0)
   stage.show()
-  positionBar()
+  settling = true
+  fadeWindow(stage, { to: 1, ms: 260, rise }).then(() => { settling = false; positionBar() })
 }
 
 function layoutView () {
@@ -328,10 +366,10 @@ function restoreScroll (y) {
   view.webContents.on('did-finish-load', once)
 }
 
-function closeTarget () {
+async function closeTarget () {
   current.target = null
   teardownSource()
-  if (stage && !stage.isDestroyed()) stage.hide()
+  await hideStage()
   if (view) view.webContents.loadURL('about:blank').catch(() => {})
   centerBar()
   pushState()
@@ -704,7 +742,11 @@ function rigVisible () {
 function showRig () {
   if (!bar || bar.isDestroyed()) return
   if (current.target && stage && !stage.isDestroyed()) {
-    stage.show()
+    if (!stage.isVisible()) {
+      stage.setOpacity(0)
+      stage.show()
+      fadeWindow(stage, { to: 1, ms: 200 })
+    }
     positionBar()
   } else {
     centerBar()
@@ -713,9 +755,9 @@ function showRig () {
   bar.focus()
 }
 
-function hideRig () {
-  if (stage && !stage.isDestroyed()) stage.hide()
+async function hideRig () {
   if (bar && !bar.isDestroyed()) bar.hide()
+  await hideStage()
 }
 
 function toggleRig () {
