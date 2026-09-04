@@ -194,9 +194,11 @@ function nextFlick () {
   if (!j || j.phase !== 'running') return
   const max = maxScroll(j.el)
   const want = j.stride * j.el.clientHeight * jitter(j)
-  const to = Math.min(max, Math.max(0, j.pos + j.dir * want))
+  let to = Math.min(max, Math.max(0, j.pos + j.dir * want))
+  // Nobody flicks the last few pixels; fold a stub into this flick.
+  if (j.dir > 0 ? max - to < 40 : to < 40) to = j.dir > 0 ? max : 0
   const dist = Math.abs(to - j.pos)
-  if (dist < 1) { finish('done'); return }
+  if (dist < 1) { j.pos = to; j.el.scrollTo({ top: to, behavior: 'instant' }); finish('done'); return }
   // A hand's flick: longer ones glide a little longer, none under a third
   // of a second or over one.
   const T = Math.min(1000, Math.max(300, 280 + dist * 0.55)) * jitter(j)
