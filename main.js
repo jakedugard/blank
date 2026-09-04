@@ -16,7 +16,7 @@ let barWidth = BAR.w   // grows to fit open wells, see 'bar:width'
 const FEATURES = { radius: true, scroll: true }
 
 // Auto-scroll defaults for targets that predate the setting.
-const SCROLL_DEFAULTS = { mode: 'steady', speed: 90, ease: 600, preroll: 2000, stride: 0.7, dwell: 500, variation: 0.3, lockSeed: false, seed: 0 }   // Medium and Skim
+const SCROLL_DEFAULTS = { mode: 'steady', speed: 90, ease: 600, preroll: 2000, stride: 0.7, dwell: 300, variation: 0.3, lockSeed: false, seed: 0 }   // Medium and Skim
 // Presets per mode: a word instead of numbers. Anything else is Custom.
 const SCROLL_PRESETS = {
   steady: [
@@ -25,9 +25,9 @@ const SCROLL_PRESETS = {
     { name: 'Fast', speed: 180, ease: 400 }
   ],
   natural: [
-    { name: 'Read', stride: 0.5, dwell: 1200, variation: 0.35 },
-    { name: 'Skim', stride: 0.7, dwell: 500, variation: 0.3 },
-    { name: 'Sweep', stride: 0.9, dwell: 250, variation: 0.15 }
+    { name: 'Read', stride: 0.5, dwell: 800, variation: 0.35 },
+    { name: 'Skim', stride: 0.7, dwell: 300, variation: 0.3 },
+    { name: 'Sweep', stride: 0.9, dwell: 150, variation: 0.15 }
   ]
 }
 
@@ -596,7 +596,7 @@ function scrollSubmenu () {
   // Only the settings the chosen mode reads. Pre-roll applies to both.
   const settings = natural ? [
     { label: `Stride: ${screens(s.stride)}`, submenu: pick([0.33, 0.5, 0.6, 0.8, 1], 'stride', screens) },
-    { label: `Dwell: ${sec(s.dwell)}`, submenu: pick([250, 500, 1000, 1500, 2500], 'dwell', sec) },
+    { label: `Dwell: ${sec(s.dwell)}`, submenu: pick([150, 300, 500, 800, 1500], 'dwell', sec) },
     { label: `Variation: ${pct(s.variation)}`, submenu: pick([0, 0.15, 0.3, 0.5], 'variation', pct) },
     { label: 'Same rhythm each take', type: 'checkbox', checked: s.lockSeed, click: () => setScroll({ lockSeed: !s.lockSeed }) }
   ] : [
