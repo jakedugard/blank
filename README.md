@@ -1,11 +1,11 @@
-# Blank
+# blank
 
 A blank window for capturing web work. Not a browser — you point it at one thing
 and it shows it at an exact size with no chrome, ready for CleanShot.
 
     npm start                 # just the bar
     npx electron . ./fixture  # straight to a target
-    npm run install-app       # unsigned arm64 build → /Applications/Blank.app
+    npm run install-app       # unsigned arm64 build → /Applications/blank.app
     npm run release           # signed + notarized universal dmg/zip in dist/
 
 ## Releasing and updates
@@ -36,7 +36,7 @@ There is no start screen. With nothing open, the bar is the whole app: drop a
 file or folder on it, paste a URL, or ⌘O. The stage appears when a target
 loads and goes away with ⌘⇧W (Close Page).
 
-Blank lives in the menu bar, not the Dock. Click the icon to summon the rig
+blank lives in the menu bar, not the Dock. Click the icon to summon the rig
 or put it away (⌘. does the same); right-click for Open, Close, Launch at
 Login and Quit. Hiding is not quitting — the tray keeps it alive.
 
@@ -46,7 +46,7 @@ Login and Quit. Hiding is not quitting — the tray keeps it alive.
   it disappears from recordings rather than going black. The panel can therefore
   overlap the stage without polluting a capture. **Show Bar in Recordings**
   (••• or the menu bar icon) turns protection off for when the recording is
-  of Blank itself.
+  of blank itself.
 - `useContentSize` gives an exact CSS-pixel viewport (1440 × 900 reads back as
   1440 × 900), so presets don't need CDP device-metrics override yet.
 
@@ -70,20 +70,37 @@ turns around. **Hold P** to pause and release to carry on. **Esc** stops, and
 so does touching the wheel or any scroll key — the moment you reach for the
 page it's yours again.
 
-Three settings, per target. Speed sits next to the button as a number — type
-it, ↑↓ to step, drag the unit to scrub. Easing and pre-roll are presets a
-right-click away (or under ••• → Auto-scroll):
+Two ways to move, per target, chosen with a right-click on the button (or
+under ••• → Auto-scroll). The menu shows only the settings the chosen mode
+reads; the bar stays blank until a scroll is under way.
 
-- **Speed** in px/s (default 90).
+**Steady** is one velocity, for showreels and long pages.
+
+- **Speed** in px/s (default 90). It also appears in the bar while a steady
+  scroll runs, where you can type it, step it with ↑↓, or drag the unit to
+  scrub, and the page picks up the change live.
 - **Easing** — the ramp in ms (default 600). Starting, stopping, pausing and
   arriving at the end of the page all use the same smoothstep velocity ramp,
   so every change of motion reads as one gesture. The arrival ramp starts at
   exactly the stopping distance, so the page settles on its last pixel.
-- **Pre-roll** — a delay before motion starts (default 2 s), so you can hit the
-  key and take your hands off before the recording shows anything move.
 
-The engine runs in the preload's isolated world on `requestAnimationFrame`, so
-it's frame-accurate and pages can't see it. Pages that scroll a container
+**Natural** is a flick, a rest, a flick: the way a hand reads a page on a
+wheel or trackpad. Each flick glides out over about half a second.
+
+- **Stride** — how far each flick travels, as a share of the screen
+  (default 60%).
+- **Dwell** — the rest between flicks (default 1.5 s).
+- **Variation** — jitter on stride, dwell and glide, so the rhythm isn't a
+  metronome (default 30%).
+- **Same rhythm each take** — the jitter is seeded, so with this on a
+  re-record of the same page moves exactly the same way.
+
+Both modes share **Pre-roll** — a delay before motion starts (default 2 s),
+so you can hit the key and take your hands off before the recording shows
+anything move.
+
+Both engines run in the preload's isolated world on `requestAnimationFrame`,
+so they're frame-accurate and pages can't see them. Pages that scroll a container
 rather than the document get the largest scrollable element.
 
 ## Shortcuts

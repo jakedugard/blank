@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>Blank</title>
+<title>blank</title>
 <style>
   :root {
     /* -apple-system resolves to SF Pro on macOS; the named faces are a belt
@@ -95,8 +95,9 @@
           title="Scroll down · ⌥-click scrolls up · ⌥↓ ⌥↑ · hold P to pause · esc stops · right-click for settings">
     <span class="sf go" aria-hidden="true">&#x100284;</span><span class="sf stop" aria-hidden="true">&#x1006F7;</span><span id="scrollStatus"></span>
   </button>
-  <!-- Auto-scroll speed: just the number. Type it, ↑↓ to step, drag the unit
-       to scrub. No icon; the transport beside it says what it's for. -->
+  <!-- Auto-scroll speed: just the number, and only while a steady scroll is
+       under way, when changing it does something. Type it, ↑↓ to step, drag
+       the unit to scrub. No icon; the transport beside it says what it's for. -->
   <label class="btn num" id="scroll" hidden title="Scroll speed · ↑↓ to step · drag px/s to scrub">
     <input id="speedIn" inputmode="numeric" spellcheck="false" autocomplete="off" value="90"><span class="unit" id="speedGrip">px/s</span>
   </label>
@@ -164,9 +165,11 @@
       if (m) stage.setSize({ w: +m[1], h: +m[2] })
     } else if (customMode && customMode.startsWith('scroll:')) {
       const key = customMode.slice(7)
-      const n = parseFloat(v)
-      // Pre-roll is asked for in seconds; the other two are already in their unit.
-      if (Number.isFinite(n)) stage.setScroll({ [key]: key === 'preroll' ? n * 1000 : n })
+      let n = parseFloat(v)
+      // Seconds and percentages are friendlier to type than ms and fractions.
+      if (key === 'preroll' || key === 'dwell') n *= 1000
+      if ((key === 'stride' || key === 'variation') && (n > 3 || /%/.test(v))) n /= 100
+      if (Number.isFinite(n)) stage.setScroll({ [key]: n })
     } else if (/^(\/|~|\.\/)/.test(v)) {
       stage.openPath(v)
     } else {
@@ -285,7 +288,10 @@
   stage.onCustomScroll((key) => askFor('scroll:' + key, {
     speed: 'Scroll speed in px/s — e.g. 120',
     ease: 'Easing ramp in ms — e.g. 600',
-    preroll: 'Pre-roll in seconds — e.g. 2'
+    preroll: 'Pre-roll in seconds — e.g. 2',
+    stride: 'Stride as a share of the screen — e.g. 0.5',
+    dwell: 'Dwell between flicks in seconds — e.g. 1.5',
+    variation: 'Variation, 0 to 1 — e.g. 0.3'
   }[key]))
 
   function askFor (mode, placeholder) {
@@ -330,12 +336,15 @@
     const sc = s.scroll
     clearInterval(countdown)
     const hidden = !s.features.scroll || !s.target || !sc
+    const live = !!(st && st.active)
     play.hidden = hidden
-    $('scroll').hidden = hidden
+    // Speed shows only while a steady scroll runs: that's when it does
+    // something, and the rest of the time the bar stays blank.
+    $('scroll').hidden = hidden || !live || sc.mode === 'natural'
     if (hidden) return
 
-    const live = !!(st && st.active)
     play.classList.toggle('live', live)
+    play.title = `${sc.mode === 'natural' ? 'Natural' : 'Steady'} scroll down · ⌥-click scrolls up · ⌥↓ ⌥↑ · hold P to pause · esc stops · right-click for settings`
     if (document.activeElement !== speedIn) speedIn.value = sc.speed
 
     const status = $('scrollStatus')

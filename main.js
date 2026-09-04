@@ -15,7 +15,7 @@ const BAR = { w: 560, h: 46, gap: 14 }
 const FEATURES = { radius: true, scroll: true }
 
 // Auto-scroll defaults for targets that predate the setting.
-const SCROLL_DEFAULTS = { speed: 90, ease: 600, preroll: 2000 }
+const SCROLL_DEFAULTS = { mode: 'steady', speed: 90, ease: 600, preroll: 2000, stride: 0.6, dwell: 1500, variation: 0.3, lockSeed: false, seed: 0 }
 
 let stage = null   // the window
 let view = null    // the page inside it, clipped to the corner radius
@@ -172,7 +172,7 @@ function createBar () {
 }
 
 // Verified on macOS 26.6.2: content protection omits the bar from
-// ScreenCaptureKit entirely. It's on unless you're recording Blank itself.
+// ScreenCaptureKit entirely. It's on unless you're recording blank itself.
 function applyBarCapture () {
   if (!bar || bar.isDestroyed()) return
   bar.setContentProtection(!store.barInCaptures())
@@ -402,10 +402,17 @@ function scrollSettings () {
   // The first targets stored a named easing; map it onto a ramp duration.
   const ease = Number.isFinite(s.ease) ? s.ease
     : ({ none: 0, gentle: 600, soft: 1200 }[s.easing] ?? SCROLL_DEFAULTS.ease)
+  const num = (k) => Number.isFinite(s[k]) ? s[k] : SCROLL_DEFAULTS[k]
   return {
-    speed: Number.isFinite(s.speed) ? s.speed : SCROLL_DEFAULTS.speed,
+    mode: s.mode === 'natural' ? 'natural' : 'steady',
+    speed: num('speed'),
     ease,
-    preroll: Number.isFinite(s.preroll) ? s.preroll : SCROLL_DEFAULTS.preroll
+    preroll: num('preroll'),
+    stride: num('stride'),
+    dwell: num('dwell'),
+    variation: num('variation'),
+    lockSeed: !!s.lockSeed,
+    seed: num('seed')
   }
 }
 
@@ -414,12 +421,20 @@ function setScroll (patch) {
   const n = { ...scrollSettings(), ...patch }
   store.update(current.target.id, {
     scroll: {
+      mode: n.mode === 'natural' ? 'natural' : 'steady',
       speed: clamp(Math.round(n.speed) || SCROLL_DEFAULTS.speed, 5, 2000),
       ease: clamp(Math.round(n.ease) || 0, 0, 10000),
-      preroll: clamp(Math.round(n.preroll) || 0, 0, 30000)
+      preroll: clamp(Math.round(n.preroll) || 0, 0, 30000),
+      stride: clamp(Number(n.stride) || SCROLL_DEFAULTS.stride, 0.1, 3),
+      dwell: clamp(Math.round(n.dwell) || 0, 0, 30000),
+      variation: clamp(Number(n.variation) || 0, 0, 1),
+      lockSeed: !!n.lockSeed,
+      seed: Math.round(n.seed) || 0
     }
   })
   pushState()
+  // Speed applies live; everything else is read at the next start.
+  if ('speed' in patch && scrollState && scrollState.active) scrollCmd('tune')
 }
 
 function scrollCmd (cmd, extra = {}) {
@@ -429,8 +444,16 @@ function scrollCmd (cmd, extra = {}) {
 
 // ⌥↓ while already scrolling down stops; ⌥↑ mid-run turns around.
 function startScroll (dir) {
-  if (scrollState && scrollState.active && scrollState.dir === dir) scrollCmd('stop')
-  else scrollCmd('start', { dir })
+  if (scrollState && scrollState.active && scrollState.dir === dir) { scrollCmd('stop'); return }
+  const s = scrollSettings()
+  // A natural take is seeded so it can be repeated. Fresh each time unless
+  // the rhythm is locked, in which case the last seed is reused.
+  let seed = s.seed
+  if (s.mode === 'natural' && !(s.lockSeed && seed)) {
+    seed = 1 + Math.floor(Math.random() * 0x7fffffff)
+    store.update(current.target.id, { scroll: { ...s, seed } })
+  }
+  scrollCmd('start', { dir, seed })
 }
 
 function hookScrollEvents (wc) {
@@ -464,12 +487,28 @@ function scrollSubmenu () {
   const s = scrollSettings()
   const t = current.target
   const active = !!(scrollState && scrollState.active)
+  const natural = s.mode === 'natural'
 
   const pick = (values, key, fmt) => values.map(v => ({
     label: fmt(v), type: 'checkbox', checked: s[key] === v, click: () => setScroll({ [key]: v })
   })).concat({ type: 'separator' }, {
     label: 'Custom…', click: () => bar && bar.webContents.send('custom-scroll', key)
   })
+  const ms = (v) => v ? `${v} ms` : 'None'
+  const sec = (v) => v ? `${v / 1000} s` : 'None'
+  const pct = (v) => v ? `${Math.round(v * 100)}%` : 'None'
+  const screens = (v) => v === 1 ? 'Full screen' : `${Math.round(v * 100)}% of screen`
+
+  // Only the settings the chosen mode reads. Pre-roll applies to both.
+  const settings = natural ? [
+    { label: `Stride: ${screens(s.stride)}`, submenu: pick([0.33, 0.5, 0.6, 0.8, 1], 'stride', screens) },
+    { label: `Dwell: ${sec(s.dwell)}`, submenu: pick([500, 1000, 1500, 2500, 4000], 'dwell', sec) },
+    { label: `Variation: ${pct(s.variation)}`, submenu: pick([0, 0.15, 0.3, 0.5], 'variation', pct) },
+    { label: 'Same rhythm each take', type: 'checkbox', checked: s.lockSeed, click: () => setScroll({ lockSeed: !s.lockSeed }) }
+  ] : [
+    { label: `Speed: ${s.speed} px/s`, submenu: pick([30, 60, 90, 150, 300], 'speed', v => `${v} px/s`) },
+    { label: `Easing: ${ms(s.ease)}`, submenu: pick([0, 300, 600, 1200, 2000], 'ease', ms) }
+  ]
 
   return [
     { label: 'Scroll Down    ⌥↓', enabled: !!t, click: () => startScroll(1) },
@@ -477,8 +516,11 @@ function scrollSubmenu () {
     { label: 'Stop    esc', enabled: active, click: () => scrollCmd('stop') },
     { label: 'Hold P to pause', enabled: false },
     { type: 'separator' },
-    { label: `Easing: ${s.ease ? s.ease + ' ms' : 'None'}`, submenu: pick([0, 300, 600, 1200, 2000], 'ease', v => v ? `${v} ms` : 'None') },
-    { label: `Pre-roll: ${s.preroll ? s.preroll / 1000 + ' s' : 'None'}`, submenu: pick([0, 1000, 2000, 3000, 5000], 'preroll', v => v ? `${v / 1000} s` : 'None') }
+    { label: 'Steady', type: 'radio', checked: !natural, click: () => setScroll({ mode: 'steady' }) },
+    { label: 'Natural', type: 'radio', checked: natural, click: () => setScroll({ mode: 'natural' }) },
+    { type: 'separator' },
+    ...settings,
+    { label: `Pre-roll: ${sec(s.preroll)}`, submenu: pick([0, 1000, 2000, 3000, 5000], 'preroll', sec) }
   ]
 }
 
@@ -492,7 +534,7 @@ function buildMenu () {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'appMenu' },
     {
-      label: 'Blank',
+      label: 'blank',
       submenu: [
         { label: 'Open…', accelerator: 'Cmd+O', click: pickTarget },
         { label: 'Close Page', accelerator: 'Cmd+Shift+W', click: closeTarget },
@@ -515,7 +557,7 @@ function buildMenu () {
             bar.webContents.send('focus-input')
           }
         },
-        { label: 'Hide Blank', accelerator: 'Cmd+.', click: hideRig }
+        { label: 'Hide blank', accelerator: 'Cmd+.', click: hideRig }
       ]
     },
     { role: 'editMenu' },
@@ -564,7 +606,7 @@ function popupMoreMenu () {
     { label: 'Close Page', accelerator: 'Cmd+Shift+W', enabled: !!t, click: closeTarget },
     { type: 'separator' },
     barCaptureItem(),
-    { label: 'Hide Blank', accelerator: 'Cmd+.', click: hideRig },
+    { label: 'Hide blank', accelerator: 'Cmd+.', click: hideRig },
     ...(updateReady ? [{ type: 'separator' }, updateItem()] : [])
   ]).popup({ window: bar })
 }
@@ -593,7 +635,7 @@ async function checkForUpdatesNow () {
     const r = await autoUpdater.checkForUpdates()
     const latest = r && r.updateInfo && r.updateInfo.version
     if (!latest || latest === app.getVersion()) {
-      dialog.showMessageBox({ message: `Blank ${app.getVersion()} is up to date.`, buttons: ['OK'] })
+      dialog.showMessageBox({ message: `blank ${app.getVersion()} is up to date.`, buttons: ['OK'] })
     }
     // Otherwise the download is already under way; the menu will offer it.
   } catch (e) {
@@ -604,11 +646,11 @@ async function checkForUpdatesNow () {
 function updateItem () {
   return updateReady
     ? { label: `Update to ${updateReady.version}`, click: () => autoUpdater.quitAndInstall() }
-    : { label: `Blank ${app.getVersion()}`, enabled: false }
+    : { label: `blank ${app.getVersion()}`, enabled: false }
 }
 
 // --- menu bar ---------------------------------------------------------------
-// Blank lives in the menu bar, not the Dock. Click the icon to summon the rig
+// blank lives in the menu bar, not the Dock. Click the icon to summon the rig
 // or put it away; right-click for the few things that aren't in the bar.
 
 function rigVisible () {
@@ -642,7 +684,7 @@ function trayMenu () {
   return Menu.buildFromTemplate([
     updateItem(),
     { type: 'separator' },
-    { label: rigVisible() ? 'Hide Blank' : 'Show Blank', click: toggleRig },
+    { label: rigVisible() ? 'Hide blank' : 'Show blank', click: toggleRig },
     { type: 'separator' },
     { label: 'Open File or Folder…', click: () => { showRig(); pickTarget() } },
     { label: t ? `Close ${t.name}` : 'Close Page', enabled: !!t, click: closeTarget },
@@ -657,7 +699,7 @@ function trayMenu () {
     },
     { label: 'Check for Updates…', enabled: app.isPackaged, click: checkForUpdatesNow },
     { type: 'separator' },
-    { label: 'Quit Blank', accelerator: 'Cmd+Q', click: () => app.quit() }
+    { label: 'Quit blank', accelerator: 'Cmd+Q', click: () => app.quit() }
   ])
 }
 
@@ -665,7 +707,7 @@ function createTray () {
   const icon = nativeImage.createFromPath(path.join(__dirname, 'ui', 'tray', 'iconTemplate.png'))
   icon.setTemplateImage(true)
   tray = new Tray(icon)
-  tray.setToolTip('Blank')
+  tray.setToolTip('blank')
   tray.on('click', toggleRig)
   tray.on('right-click', () => tray.popUpContextMenu(trayMenu()))
 }

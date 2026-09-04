@@ -27,7 +27,7 @@ class TargetStore {
   all () { return this.data.targets }
 
   // Whether the bar shows up in screen recordings. Off by default so the bar
-  // never pollutes a capture of the page; on when the capture is of Blank.
+  // never pollutes a capture of the page; on when the capture is of blank.
   barInCaptures () { return !!this.data.barInCaptures }
   setBarInCaptures (on) {
     this.data.barInCaptures = !!on
@@ -61,7 +61,7 @@ class TargetStore {
         localPath: null,
         liveUrl: null,
         size: size || { w: 1440, h: 900 },
-        scroll: { speed: 90, ease: 600, preroll: 2000 },   // px/s, ramp ms, delay ms
+        scroll: { mode: 'steady', speed: 90, ease: 600, preroll: 2000, stride: 0.6, dwell: 1500, variation: 0.3 },
         source: localPath ? 'local' : 'live',
         openedAt: Date.now()
       }
