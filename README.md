@@ -56,7 +56,7 @@ Login and Quit. Hiding is not quitting — the tray keeps it alive.
 images. Local targets get an ephemeral 127.0.0.1 server rooted at the containing
 folder instead. Watching that folder gives live reload for free.
 
-## Auto-scroll (parked — `FEATURES.scroll` in main.js)
+## Auto-scroll
 
 A capture that scrolls by hand always looks scrolled by hand. **⌥↓** scrolls
 the page down at a set speed, **⌥↑** up; the same key again stops, the
@@ -64,8 +64,9 @@ opposite key turns around. **Hold P** to pause and release to carry on. **Esc**
 stops, and so does touching the wheel or any scroll key — the moment you reach
 for the page it's yours again.
 
-Three settings, per target, from the speed readout in the bar or ••• →
-Auto-scroll:
+Three settings, per target. Speed lives in the bar as a number — type it,
+drag the arrow to scrub, ↑↓ to step — and the other two are presets under
+••• → Auto-scroll:
 
 - **Speed** in px/s (default 90).
 - **Easing** — the ramp in ms (default 600). Starting, stopping, pausing and
@@ -82,8 +83,7 @@ rather than the document get the largest scrollable element.
 ## Shortcuts
 
 | ⌘O | open | ⌘K | focus bar | ⌘R | reload | ⌘⇧W | close page | ⌘. | hide |
-
-With auto-scroll on: ⌥↓ down, ⌥↑ up, hold P to pause, esc to stop.
+| ⌥↓ | scroll down | ⌥↑ | scroll up | P (hold) | pause | esc | stop |
 
 The stage has no chrome to grab, so **⌘-drag anywhere on the page** moves the
 stage and bar together, and the bar itself drags from any non-control area.

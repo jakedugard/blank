@@ -64,6 +64,9 @@
     color:inherit; font-variant-numeric:tabular-nums; cursor:text;
   }
   .num:focus-within { color:var(--ink); }
+  .num .unit { color:inherit; opacity:.7; margin-left:-2px; }
+  #speedIn { width:3.2ch; }
+  #scrollStatus:empty { display:none; }
 </style>
 
 <div class="bar" id="bar">
@@ -72,8 +75,14 @@
            placeholder="Drop a file or folder, or paste a URL">
   </div>
 
-  <button class="btn" id="scroll" hidden
-          title="Auto-scroll · ⌥↓ down · ⌥↑ up · hold P to pause · esc stops">— px/s</button>
+  <!-- Auto-scroll speed, edited like the radius: type, scrub the icon, ↑↓.
+       The same control doubles as the readout while the page is moving. -->
+  <label class="btn num" id="scroll" hidden
+         title="Auto-scroll speed · ⌥↓ down · ⌥↑ up · hold P to pause · esc stops">
+    <svg id="speedGrip" width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
+      <path d="M5.5 0.5 V10 M1.5 6.5 L5.5 10.5 L9.5 6.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    </svg><input id="speedIn" inputmode="numeric" spellcheck="false" autocomplete="off" value="90"><span class="unit">px/s</span><span id="scrollStatus"></span>
+  </label>
   <button class="btn" id="size">— × —</button>
   <!-- Corner radius is a number, so it's edited as one: click to type,
        drag the icon to scrub, ↑↓ to step (⇧ for tens). -->
@@ -162,7 +171,44 @@
   })
 
   // --- controls -------------------------------------------------------------
-  $('scroll').onclick = () => stage.scrollMenu()
+
+  // --- auto-scroll speed: inline number, same gestures as the radius -------
+  const speedIn = $('speedIn')
+  let speedPending = 0
+  const commitSpeed = (n) => {
+    n = Math.max(5, Math.min(2000, Math.round(n) || 90))
+    speedIn.value = n
+    cancelAnimationFrame(speedPending)
+    speedPending = requestAnimationFrame(() => stage.setScroll({ speed: n }))
+  }
+  speedIn.addEventListener('focus', () => { editing = true; speedIn.select() })
+  speedIn.addEventListener('blur', () => { editing = false; commitSpeed(parseInt(speedIn.value, 10)) })
+  speedIn.addEventListener('keydown', (e) => {
+    const cur = parseInt(speedIn.value, 10) || 0
+    const step = e.shiftKey ? 30 : 10
+    if (e.key === 'ArrowUp') { e.preventDefault(); commitSpeed(cur + step) }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); commitSpeed(cur - step) }
+    else if (e.key === 'Enter') { commitSpeed(cur); speedIn.blur(); back() }
+    else if (e.key === 'Escape') { speedIn.value = state && state.scroll ? state.scroll.speed : cur; speedIn.blur(); back() }
+  })
+  $('speedGrip').addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    const grip = e.currentTarget
+    grip.setPointerCapture(e.pointerId)
+    const ox = e.screenX
+    const base = parseInt(speedIn.value, 10) || 90
+    const move = (ev) => commitSpeed(base + Math.round(ev.screenX - ox) * 2)
+    const up = () => {
+      grip.removeEventListener('pointermove', move)
+      grip.removeEventListener('pointerup', up)
+      grip.removeEventListener('pointercancel', up)
+    }
+    grip.addEventListener('pointermove', move)
+    grip.addEventListener('pointerup', up)
+    grip.addEventListener('pointercancel', up)
+  })
   $('size').onclick = () => stage.sizeMenu()
 
   // --- corner radius: an inline number ---------------------------------------
@@ -247,8 +293,9 @@
     }
   }
 
-  // The scroll readout counts down through the pre-roll, then shows direction
-  // and speed while the page is moving. Idle it's just the speed setting.
+  // While the page moves, the speed control doubles as the readout: the
+  // arrow flips for direction, and a status counts down the pre-roll or
+  // says paused.
   let countdown = null
   function renderScroll (s) {
     const b = $('scroll')
@@ -259,22 +306,22 @@
     if (b.hidden) return
 
     const live = !!(st && st.active)
-    const arrow = st && st.dir < 0 ? '↑' : '↓'
     b.classList.toggle('live', live)
+    $('speedGrip').style.transform = st && st.dir < 0 ? 'rotate(180deg)' : ''
+    if (document.activeElement !== speedIn) speedIn.value = sc.speed
 
+    const status = $('scrollStatus')
     if (live && st.phase === 'preroll') {
       const tickDown = () => {
         const left = Math.max(0, st.until - Date.now())
-        b.textContent = `${arrow} in ${(left / 1000).toFixed(1)} s`
+        status.textContent = `in ${(left / 1000).toFixed(1)} s`
       }
       tickDown()
       countdown = setInterval(tickDown, 100)
     } else if (live && st.phase === 'paused') {
-      b.textContent = `${arrow} paused`
-    } else if (live) {
-      b.textContent = `${arrow} ${sc.speed} px/s`
+      status.textContent = 'paused'
     } else {
-      b.textContent = `${sc.speed} px/s`
+      status.textContent = ''
     }
   }
 </script>

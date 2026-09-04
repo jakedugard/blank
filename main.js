@@ -11,9 +11,8 @@ const { TargetStore } = require('./src/targets')
 // INSET is that transparent margin; gap is measured from the visible edge.
 const BAR = { w: 560, h: 46, gap: 14 }
 
-// Parked features. The code stays wired; these just keep it out of the UI.
-// scroll: not needed for a clean window yet.
-const FEATURES = { radius: true, scroll: false }
+// Feature gates. Everything stays wired; these only control what shows.
+const FEATURES = { radius: true, scroll: true }
 
 // Auto-scroll defaults for targets that predate the setting.
 const SCROLL_DEFAULTS = { speed: 90, ease: 600, preroll: 2000 }
@@ -478,7 +477,6 @@ function scrollSubmenu () {
     { label: 'Stop    esc', enabled: active, click: () => scrollCmd('stop') },
     { label: 'Hold P to pause', enabled: false },
     { type: 'separator' },
-    { label: `Speed: ${s.speed} px/s`, submenu: pick([30, 60, 90, 120, 180, 240, 360], 'speed', v => `${v} px/s`) },
     { label: `Easing: ${s.ease ? s.ease + ' ms' : 'None'}`, submenu: pick([0, 300, 600, 1200, 2000], 'ease', v => v ? `${v} ms` : 'None') },
     { label: `Pre-roll: ${s.preroll ? s.preroll / 1000 + ' s' : 'None'}`, submenu: pick([0, 1000, 2000, 3000, 5000], 'preroll', v => v ? `${v / 1000} s` : 'None') }
   ]
@@ -758,7 +756,7 @@ app.whenReady().then(async () => {
     require(path.resolve(process.env.STAGE_PROBE))({
       stage: () => stage, view: () => view, bar: () => bar,
       startScroll, scrollCmd, setScroll, setRadius, applySize, openPath, closeTarget, storeRadius: () => store.radius(), toggleRig,
-      storeBarInCaptures: () => store.barInCaptures(), setBarInCaptures: (on) => { store.setBarInCaptures(on); applyBarCapture() },
+      storeBarInCaptures: () => store.barInCaptures(), scrollSettingsNow: scrollSettings, setBarInCaptures: (on) => { store.setBarInCaptures(on); applyBarCapture() },
       scrollState: () => scrollState
     })
   }
