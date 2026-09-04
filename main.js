@@ -360,6 +360,7 @@ function pushState () {
     radius: store.radius(),
     features: FEATURES,
     scroll: { ...scrollSettings(), preset: scrollPreset() },
+    scrollPresets: Object.fromEntries(Object.entries(SCROLL_PRESETS).map(([m, l]) => [m, l.map(p => p.name)])),
     scrolling: scrollState,
     maxFit: { w: work.width, h: work.height },
     recents: store.all().slice(0, 8).map(r => ({ id: r.id, name: r.name }))
@@ -764,6 +765,7 @@ ipcMain.handle('stage:setScroll', (_e, patch) => setScroll(patch || {}))
 ipcMain.handle('stage:scroll', (_e, dir) => startScroll(dir < 0 ? -1 : 1))
 ipcMain.handle('stage:scrollStop', () => scrollCmd('stop'))
 ipcMain.handle('stage:scrollAs', (_e, mode, dir) => { setScroll({ mode }); startScroll(dir < 0 ? -1 : 1) })
+ipcMain.handle('stage:scrollPreset', (_e, name) => applyScrollPreset(name))
 ipcMain.handle('stage:focusStage', () => stage && stage.isVisible() && stage.focus())
 
 // Manual drag: both windows move from a recorded origin plus the pointer delta,

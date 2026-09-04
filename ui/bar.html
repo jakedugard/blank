@@ -15,7 +15,7 @@
     --ink:#f4f2ee; --dim:rgba(255,255,255,.84);
     --bar:rgba(0,0,0,.6); --bar-hot:rgba(20,20,20,.7);
     --rule:rgba(255,255,255,.07); --accent:#ff8a72;
-    --well:rgba(255,255,255,.06); --pill:rgba(255,255,255,.14);
+    --well:rgba(255,255,255,.06); --hover:rgba(255,255,255,.09); --pill:rgba(255,255,255,.14);
   }
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; background:transparent; overflow:hidden; }
@@ -78,15 +78,23 @@
   }
   .group[hidden], .group:not(:has(> .btn:not([hidden]))) { display:none; }
   .group .btn { padding:4px 8px; border-radius:6px; }
+  .group .btn:hover { background:var(--hover); color:var(--ink); }
   .group .btn.on { background:var(--pill); color:var(--ink); }
-  .group .label { color:var(--dim); opacity:.55; padding:4px 5px 4px 7px; cursor:default; }
+  /* The label is a button in every respect but the click, so it sits on
+     the same line as its neighbours. */
+  .group .label {
+    all:unset; display:flex; align-items:center; flex:none;
+    padding:4px 5px 4px 7px; font:12px var(--font); color:var(--dim); opacity:.55; cursor:default;
+  }
 
-  /* Scroll. Steady or Natural starts; the running one is the filled pill,
-     lit, with the readout inside it, and a click there stops. */
-  .scroll .btn .sf, .scroll .btn .status { display:none; }
-  .scroll .btn.on { color:var(--accent); }
-  .scroll .btn.on .sf, .scroll .btn.on .status { display:inline; }
-  .scroll .btn.on:hover { color:var(--ink); }
+  /* Scroll. Steady or Natural selects; the play at the end of the well
+     goes. While the page moves the play is the stop, lit, with the readout
+     inside it. The presets well opens beside it for the selected mode. */
+  .btn.play .stop, .btn.play .status { display:none; }
+  .btn.play.live { background:var(--pill); color:var(--accent); }
+  .btn.play.live .go { display:none; }
+  .btn.play.live .stop, .btn.play.live .status { display:inline; }
+  .btn.play.live:hover { color:var(--ink); }
 </style>
 
 <div class="bar" id="bar">
@@ -95,19 +103,20 @@
            placeholder="Drop a file or folder, or paste a URL">
   </div>
 
-  <!-- Auto-scroll. Steady or Natural starts a scroll down, ⌥-click up.
-       The running one shows the readout: the pre-roll countdown, the
-       direction, or paused. Click it to stop. Right-click the group for the
-       numbers, pre-roll and the rest. -->
+  <!-- Auto-scroll. Steady or Natural selects the mode and opens the play
+       and the presets; the same word again folds them. Play scrolls down,
+       ⌥-click up. While it runs, play is the stop with the readout: the
+       pre-roll countdown, the direction, or paused. Right-click the group
+       for the numbers, pre-roll and the rest. -->
   <div class="group scroll" id="scroll" hidden>
     <span class="label" title="Auto-scroll · right-click to fine-tune">Scroll</span>
-    <button class="btn" data-mode="steady" title="One speed, start to finish · ⌥-click scrolls up">
-      <span class="sf" aria-hidden="true">&#x1006F7;</span><span class="name">Steady</span><span class="status"></span>
-    </button>
-    <button class="btn" data-mode="natural" title="A flick, a rest, a flick · ⌥-click scrolls up">
-      <span class="sf" aria-hidden="true">&#x1006F7;</span><span class="name">Natural</span><span class="status"></span>
+    <button class="btn" data-mode="steady" title="One speed, start to finish">Steady</button>
+    <button class="btn" data-mode="natural" title="A flick, a rest, a flick">Natural</button>
+    <button class="btn play" id="play" hidden title="Scroll down · ⌥-click scrolls up · ⌥↓ ⌥↑ · hold P to pause · esc stops">
+      <span class="sf go" aria-hidden="true">&#x100284;</span><span class="sf stop" aria-hidden="true">&#x1006F7;</span><span class="status" id="scrollStatus"></span>
     </button>
   </div>
+  <div class="group" id="presets" hidden></div>
 
   <div class="group">
     <button class="btn" id="size">— × —</button>
@@ -131,6 +140,7 @@
   let state = null
   let customMode = null        // 'size' | 'scroll:<key>' while the input captures a value
   let editing = false
+  let armed = null             // target id whose scroll well is open
 
   const back = () => stage.focusStage()
 
@@ -257,15 +267,29 @@
 
   // --- auto-scroll ------------------------------------------------------------
   const scroll = $('scroll')
+  const play = $('play')
+  const presets = $('presets')
   const modeBtns = [...scroll.querySelectorAll('[data-mode]')]
+  const scrollNow = (k) => (state && state.scroll) ? state.scroll[k] : null
+  const isArmed = () => !!(state && state.target && armed === state.target.id)
   for (const b of modeBtns) {
-    b.onclick = (e) => {
-      if (b.classList.contains('on')) stage.scrollStop()
-      else stage.scrollAs(b.dataset.mode, e.altKey ? -1 : 1)
+    b.onclick = () => {
+      const mode = b.dataset.mode
+      if (isArmed() && scrollNow('mode') === mode) { armed = null; render(state); return }
+      armed = state.target.id
+      if (scrollNow('mode') !== mode) stage.setScroll({ mode }); else render(state)
       back()
     }
   }
-  scroll.addEventListener('contextmenu', (e) => { e.preventDefault(); stage.scrollMenu() })
+  play.onclick = (e) => {
+    const live = !!(state && state.scrolling && state.scrolling.active)
+    if (live) stage.scrollStop()
+    else stage.scroll(e.altKey ? -1 : 1)
+    back()
+  }
+  for (const el of [scroll, presets]) {
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); stage.scrollMenu() })
+  }
 
   $('size').onclick = () => stage.sizeMenu()
   $('more').onclick = () => stage.moreMenu()
@@ -289,7 +313,12 @@
   }
 
   // --- render ---------------------------------------------------------------
-  stage.onState((s) => { state = s; render(s) })
+  stage.onState((s) => {
+    state = s
+    // A keyboard start opens the well too, so the readout has somewhere to be.
+    if (s && s.target && s.scrolling && s.scrolling.active) armed = s.target.id
+    render(s)
+  })
 
   function render (s) {
     if (!s) return
@@ -315,32 +344,46 @@
     }
   }
 
-  // While the page moves, the running mode is the filled pill and carries
-  // the readout: a countdown through the pre-roll, then the direction, or
-  // paused.
+  // The selected mode is the filled pill; the well shows play, and the
+  // presets well beside it, only while a mode is selected. While the page
+  // moves, play is the stop and carries the readout: a countdown through
+  // the pre-roll, then the direction, or paused.
   let countdown = null
   function renderScroll (s) {
     const st = s.scrolling
     const sc = s.scroll
     clearInterval(countdown)
     scroll.hidden = !s.features.scroll || !s.target || !sc
+    presets.hidden = true
     if (scroll.hidden) return
 
+    const open = isArmed()
     const live = !!(st && st.active)
-    let status = null
-    for (const b of modeBtns) {
-      const on = live && b.dataset.mode === st.mode
-      b.classList.toggle('on', on)
-      b.title = on ? 'Stop · esc' : b.dataset.mode === 'steady'
-        ? 'One speed, start to finish · ⌥-click scrolls up'
-        : 'A flick, a rest, a flick · ⌥-click scrolls up'
-      const el = b.querySelector('.status')
-      el.textContent = ''
-      if (on) status = el
-    }
-    if (!status) return
+    for (const b of modeBtns) b.classList.toggle('on', open && b.dataset.mode === sc.mode)
+    play.hidden = !open
+    play.classList.toggle('live', live)
 
-    const arrow = st.dir < 0 ? ' ↑' : ' ↓'
+    if (open && s.scrollPresets) {
+      presets.hidden = false
+      const names = s.scrollPresets[sc.mode] || []
+      const want = names.join('|') + '|' + sc.mode
+      if (presets.dataset.for !== want) {
+        presets.dataset.for = want
+        presets.replaceChildren(...names.map(n => {
+          const b = document.createElement('button')
+          b.className = 'btn'
+          b.textContent = n
+          b.onclick = () => { stage.scrollPreset(n); back() }
+          return b
+        }))
+      }
+      for (const b of presets.children) b.classList.toggle('on', b.textContent === sc.preset)
+    }
+
+    const status = $('scrollStatus')
+    status.textContent = ''
+    if (!live) return
+    const arrow = st.dir < 0 ? '↑' : '↓'
     if (st.phase === 'preroll') {
       const tickDown = () => {
         const left = Math.max(0, st.until - Date.now())
