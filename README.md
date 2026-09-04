@@ -66,7 +66,7 @@ A capture that scrolls by hand always looks scrolled by hand. Hover
   wheel or trackpad. Each flick accelerates, glides out over about a second,
   and the page rests before the next.
 
-Click one and the page scrolls down after a two-second pre-roll, so you can
+Click one and the page scrolls down after a one-second pre-roll, so you can
 take your hands off before the recording shows anything move; **⌥-click**
 scrolls up. While it runs the same spot is the readout — the countdown, then
 the mode and direction, or paused — and a click there stops. From the
