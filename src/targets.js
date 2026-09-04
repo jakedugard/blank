@@ -45,7 +45,7 @@ class TargetStore {
 
   // Corner radius is a house style rather than a per-project fact, so it's
   // stored once and applied to everything.
-  radius () { return this.data.radius || 0 }
+  radius () { return Number.isFinite(this.data.radius) ? this.data.radius : 12 }
   setRadius (r) {
     this.data.radius = Math.max(0, Math.min(120, Math.round(r) || 0))
     this.save()

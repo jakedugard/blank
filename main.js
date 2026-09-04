@@ -88,7 +88,7 @@ function createStage () {
   // There is no start screen. The stage only exists while a target is loaded;
   // with nothing open, the bar is the whole app.
   stage.on('move', () => { if (!dragging && !settling && stage.isVisible()) positionBar() })
-  stage.on('resize', () => { layoutView(); if (!dragging && stage.isVisible()) positionBar() })
+  stage.on('resize', () => { layoutView(); if (!dragging && !settling && stage.isVisible()) positionBar() })
   stage.on('closed', () => {
     stage = null
     view = null
@@ -135,6 +135,25 @@ function fadeWindow (win, { to, ms, rise = 0 }) {
   })
 }
 
+// Slide a window to a spot on the same curve, for the bar following the stage.
+function glideWindow (win, { x, y, ms }) {
+  return new Promise((resolve) => {
+    if (!win || win.isDestroyed()) return resolve()
+    clearInterval(fading.get(win))
+    const [x0, y0] = win.getPosition()
+    const t0 = Date.now()
+    const step = () => {
+      if (win.isDestroyed()) { clearInterval(timer); return resolve() }
+      const k = EASE_OUT(Math.min(1, (Date.now() - t0) / ms))
+      win.setPosition(Math.round(x0 + (x - x0) * k), Math.round(y0 + (y - y0) * k), false)
+      if (k >= 1) { clearInterval(timer); fading.delete(win); resolve() }
+    }
+    const timer = setInterval(step, 1000 / 60)
+    fading.set(win, timer)
+    step()
+  })
+}
+
 async function hideStage () {
   if (!stage || stage.isDestroyed() || !stage.isVisible()) return
   await fadeWindow(stage, { to: 0, ms: 220 })
@@ -150,15 +169,20 @@ function showStage () {
   const [w, h] = stage.getSize()
   const x = Math.round(work.x + (work.width - w) / 2)
   const y = Math.round(work.y + Math.max(0, (work.height - h - BAR.h - BAR.gap) / 2))
-  // The bar goes straight to where the stage will settle. The page starts
-  // down at the bar, behind it, and rises into place as it fades in.
-  if (bar && !bar.isDestroyed()) bar.setBounds(barBoundsFor({ x, y, width: w, height: h }))
+  // The page starts down at the bar, behind it, and rises into place as it
+  // fades in; the bar glides to where the page will settle on the same curve.
+  const ms = 520
   const rise = BAR.gap + BAR.h + 24
   stage.setPosition(x, y + rise, false)
   stage.setOpacity(0)
   stage.show()
   settling = true
-  fadeWindow(stage, { to: 1, ms: 520, rise }).then(() => { settling = false; positionBar() })
+  if (bar && !bar.isDestroyed()) {
+    const fb = barBoundsFor({ x, y, width: w, height: h })
+    if (bar.getBounds().width !== fb.width) bar.setSize(fb.width, fb.height, false)
+    glideWindow(bar, { x: fb.x, y: fb.y, ms })
+  }
+  fadeWindow(stage, { to: 1, ms, rise }).then(() => { settling = false; positionBar() })
 }
 
 function layoutView () {
