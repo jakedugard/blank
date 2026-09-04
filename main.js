@@ -603,7 +603,7 @@ function scrollSubmenu () {
 
   // Only the settings the chosen mode reads. Pre-roll applies to both.
   const settings = natural ? [
-    { label: `Stride: ${screens(s.stride)}`, submenu: pick([0.35, 0.5, 0.65, 0.85, 1.1], 'stride', screens) },
+    { label: `Stride: ${screens(s.stride)}`, submenu: pick([0.25, 0.5, 0.75, 1, 1.25, 1.5, 2], 'stride', screens) },
     { label: `Dwell: ${sec(s.dwell)}`, submenu: pick([100, 200, 400, 600, 1000], 'dwell', sec) },
     { label: `Variation: ${pct(s.variation)}`, submenu: pick([0, 0.15, 0.3, 0.5], 'variation', pct) },
     { label: `Glide: ${glide(s.pace)}`, submenu: pick([0.55, 0.85, 1, 1.4], 'pace', glide) },
