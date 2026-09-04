@@ -69,21 +69,14 @@
      -apple-system. Regular weight is the thin cut at this size. */
   .sf { font:400 12px/1 var(--font); flex:none; }
 
-  /* Scroll. One word at rest. Hover it and it becomes the two ways to go,
-     Steady and Natural; click one and the page moves. While it moves the
-     same spot is the readout, lit, and a click there stops.
-     The word and the pair share one grid cell, so the box is always as wide
-     as the pair and the word sits centred in it: on hover nothing shifts,
-     and the pointer lands in the gap between the two, on neither. */
-  .scroll { display:grid; align-items:center; flex:none; }
-  .scroll[hidden] { display:none; }    /* display:grid would otherwise win, as with .btn */
-  .scroll > * { grid-area:1 / 1; }
-  .scroll .word { justify-self:center; }
-  .scroll .choices { display:flex; gap:10px; visibility:hidden; }
-  .scroll:hover:not(.live) .word { visibility:hidden; }
-  .scroll:hover:not(.live) .choices { visibility:visible; }
-  .scroll.live .word, .scroll.live .choices { display:none; }
-  .scroll .readout { display:none; justify-self:center; }
+  /* Scroll: a label and its two options, always in view. Click one and
+     the page moves; ⌥-click and it moves up. While it moves the group is
+     the readout, lit, and a click there stops. */
+  .scroll { display:flex; align-items:center; flex:none; gap:2px; }
+  .scroll[hidden] { display:none; }    /* display:flex would otherwise win, as with .btn */
+  .scroll .label { color:var(--dim); opacity:.55; padding:5px 4px 5px 9px; cursor:default; }
+  .scroll .readout { display:none; }
+  .scroll.live .label, .scroll.live .choices { display:none; }
   .scroll.live .readout { display:flex; color:var(--accent); }
   .scroll .readout:hover { color:var(--ink); }
 </style>
@@ -94,13 +87,13 @@
            placeholder="Drop a file or folder, or paste a URL">
   </div>
 
-  <!-- Auto-scroll. Hover for Steady or Natural; click starts a scroll down,
-       ⌥-click up. While it runs, the readout counts down the pre-roll, shows
-       the direction, or says paused; click it to stop. Right-click for the
-       numbers, pre-roll and the rest. -->
+  <!-- Auto-scroll. Steady or Natural starts a scroll down, ⌥-click up.
+       While it runs, the readout counts down the pre-roll, shows the
+       direction, or says paused; click it to stop. Right-click the group
+       for the numbers, pre-roll and the rest. -->
   <div class="scroll" id="scroll" hidden>
-    <button class="btn word" title="Auto-scroll">Scroll</button>
-    <span class="choices">
+    <span class="label" title="Auto-scroll · right-click to fine-tune">Scroll</span>
+    <span class="choices" style="display:contents">
       <button class="btn" data-mode="steady" title="One speed, start to finish · ⌥-click scrolls up">Steady</button>
       <button class="btn" data-mode="natural" title="A flick, a rest, a flick · ⌥-click scrolls up">Natural</button>
     </span>
@@ -257,7 +250,6 @@
     b.onclick = (e) => { stage.scrollAs(b.dataset.mode, e.altKey ? -1 : 1); back() }
   }
   scroll.querySelector('.readout').onclick = () => { stage.scrollStop(); back() }
-  scroll.querySelector('.word').onclick = () => stage.scrollMenu()
   scroll.addEventListener('contextmenu', (e) => { e.preventDefault(); stage.scrollMenu() })
 
   $('size').onclick = () => stage.sizeMenu()
