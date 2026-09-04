@@ -58,11 +58,11 @@ folder instead. Watching that folder gives live reload for free.
 
 ## Auto-scroll
 
-A capture that scrolls by hand always looks scrolled by hand. The **play** button in
-the bar scrolls the page down at a set speed; **⌥-click** it to scroll up.
-While the page moves the button becomes the stop and the readout beside it
-counts down the pre-roll, shows the direction, or says paused. Click it again
-to stop.
+A capture that scrolls by hand always looks scrolled by hand. **Scroll** in
+the bar opens the strip; the strip's **play** button scrolls the page down at
+a set speed, and **⌥-click** scrolls up. While the page moves the button
+becomes the stop and the readout beside it counts down the pre-roll, shows
+the direction, or says paused. Click it again to stop.
 
 From the keyboard, so your hands are off the mouse when the recording starts:
 **⌥↓** scrolls down, **⌥↑** up; the same key again stops, the opposite key
@@ -70,12 +70,11 @@ turns around. **Hold P** to pause and release to carry on. **Esc** stops, and
 so does touching the wheel or any scroll key — the moment you reach for the
 page it's yours again.
 
-Press play and the bar opens a strip beside it: the mode, and that mode's
-two or three numbers, edited like the radius (type, ↑↓, or drag the unit to
-scrub) and picked up by the page live. The address condenses to the page's
-name to make room, and the bar widens to fit; click the name to get the
-address back. The strip stays open through stop and go, until you leave it.
-Pre-roll, the locked rhythm and custom entry live one right-click away.
+The strip holds play, the mode, and that mode's two or three numbers, edited
+like the radius (type, ↑↓, or drag the unit to scrub) and picked up by the
+page live. The address condenses to the page's name to make room, and the
+bar widens to fit; click Scroll again, or the name, to fold it. Pre-roll,
+the locked rhythm and custom entry live one right-click away.
 
 **Steady** is one velocity, for showreels and long pages.
 

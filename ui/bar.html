@@ -80,7 +80,9 @@
   .btn.play .stop, .btn.play.live .go { display:none; }
   .btn.play.live .stop { display:inline; }
 
-  /* The strip: the mode and its numbers, only while scrolling is in hand. */
+  /* Scroll is a word that opens the strip: the transport, the mode and its
+     numbers. Lit while open. */
+  .btn.toggle.on { color:var(--ink); }
   .strip-ctl { display:contents; }
   .strip-ctl[hidden] { display:none; }
   .rule { flex:none; width:1px; height:14px; background:var(--rule); margin:0 2px; }
@@ -93,17 +95,18 @@
            placeholder="Drop a file or folder, or paste a URL">
   </div>
 
-  <!-- Auto-scroll transport. Click scrolls down, ⌥-click up; while the page
-       moves it's the stop, and the status beside it counts down the pre-roll,
-       shows the direction, or says paused. Right-click for the full menu. -->
-  <button class="btn play" id="play" hidden>
-    <span class="sf go" aria-hidden="true">&#x100284;</span><span class="sf stop" aria-hidden="true">&#x1006F7;</span><span id="scrollStatus"></span>
-  </button>
+  <!-- Scroll opens and closes the strip. Nothing moves until play. -->
+  <button class="btn toggle" id="scrollToggle" hidden title="Auto-scroll">Scroll</button>
 
-  <!-- The strip. Numbers are edited like the radius: type, ↑↓ to step, drag
-       the unit to scrub. Which ones show depends on the mode; changes reach
-       the page live. -->
+  <!-- The strip. Play scrolls down, ⌥-click up; while the page moves it's
+       the stop, and the status beside it counts down the pre-roll, shows the
+       direction, or says paused. Numbers are edited like the radius: type,
+       ↑↓ to step, drag the unit to scrub. Which ones show depends on the
+       mode; changes reach the page live. Right-click for the full menu. -->
   <div class="strip-ctl" id="strip" hidden>
+    <button class="btn play" id="play">
+      <span class="sf go" aria-hidden="true">&#x100284;</span><span class="sf stop" aria-hidden="true">&#x1006F7;</span><span id="scrollStatus"></span>
+    </button>
     <span class="rule"></span>
     <button class="btn mode" id="mode" title="Switch mode">Steady</button>
     <label class="btn num" data-key="speed" title="Speed · ↑↓ to step · drag unit to scrub">
@@ -121,7 +124,6 @@
     <label class="btn num" data-key="variation" title="Variation in stride, dwell and glide · ↑↓ to step · drag unit to scrub">
       <input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">% vary</span>
     </label>
-    <span class="rule"></span>
   </div>
 
   <button class="btn" id="size">— × —</button>
@@ -294,17 +296,19 @@
   play.onclick = (e) => {
     const live = !!(state && state.scrolling && state.scrolling.active)
     if (live) stage.scrollStop()
-    else { setStrip(true); stage.scroll(e.altKey ? -1 : 1) }
+    else stage.scroll(e.altKey ? -1 : 1)
     back()
   }
   $('mode').onclick = () => stage.setScroll({ mode: scrollNow('mode') === 'natural' ? 'steady' : 'natural' })
   // Pre-roll, the locked rhythm and custom entry stay one right-click away.
-  for (const el of [play, $('strip')]) {
+  for (const el of [$('scrollToggle'), $('strip')]) {
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); stage.scrollMenu() })
   }
 
-  // The strip opens on the first press and stays until you go back to the
-  // address, so you can tune, stop and go again without it moving.
+  $('scrollToggle').onclick = () => { setStrip(!strip); back() }
+
+  // The strip stays open until you fold it or go back to the address, so
+  // you can tune, stop and go again without it moving.
   function setStrip (on) {
     strip = on
     stripFor = on && state && state.target ? state.target.id : null
@@ -379,13 +383,16 @@
     clearInterval(countdown)
     const hidden = !s.features.scroll || !s.target || !sc
     const live = !!(st && st.active)
-    play.hidden = hidden
+    const toggle = $('scrollToggle')
+    toggle.hidden = hidden
+    toggle.classList.toggle('on', showStrip)
     $('strip').hidden = hidden || !showStrip
     if (hidden) return
 
     play.classList.toggle('live', live)
     const modeName = sc.mode === 'natural' ? 'Natural' : 'Steady'
-    play.title = `${modeName} scroll down · ⌥-click scrolls up · ⌥↓ ⌥↑ · hold P to pause · esc stops · right-click for pre-roll and more`
+    play.title = `${modeName} scroll down · ⌥-click scrolls up · ⌥↓ ⌥↑ · hold P to pause · esc stops`
+    toggle.title = showStrip ? 'Close the scroll strip · right-click for pre-roll and more' : 'Auto-scroll'
 
     const mode = $('mode')
     mode.textContent = modeName
