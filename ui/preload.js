@@ -45,6 +45,22 @@ window.addEventListener('mousedown', (e) => {
 
 const smooth = (k) => k * k * (3 - 2 * k)
 const easeOut = (t) => 1 - (1 - t) ** 3
+
+// A hand's flick, as a velocity profile: a sine ramp up over the first
+// GLIDE_IN of the stroke (the finger getting going), then a squared decay to
+// rest (the release). Integrated in closed form so a frame can ask for the
+// position at any t. Velocity is continuous at the handover.
+const GLIDE_IN = 0.25
+const glideTotal = 2 * GLIDE_IN / Math.PI + (1 - GLIDE_IN) / 3
+function glide (t) {
+  let d
+  if (t < GLIDE_IN) d = (2 * GLIDE_IN / Math.PI) * (1 - Math.cos(Math.PI * t / (2 * GLIDE_IN)))
+  else {
+    const u = (t - GLIDE_IN) / (1 - GLIDE_IN)
+    d = 2 * GLIDE_IN / Math.PI + (1 - GLIDE_IN) * (1 - (1 - u) ** 3) / 3
+  }
+  return d / glideTotal
+}
 // Distance covered while k ramps from 0 to `k` at 1/ease per ms, in px:
 // speed · ease · ∫smooth = speed · ease · (k³ − k⁴/2). At k = 1 that's half
 // the cruise distance, which is when the arrival ramp has to begin.
@@ -199,10 +215,10 @@ function nextFlick () {
   if (j.dir > 0 ? max - to < 40 : to < 40) to = j.dir > 0 ? max : 0
   const dist = Math.abs(to - j.pos)
   if (dist < 1) { j.pos = to; j.el.scrollTo({ top: to, behavior: 'instant' }); finish('done'); return }
-  // A hand's flick: longer ones glide a little longer, none under a third
-  // of a second or over one.
-  const T = Math.min(1000, Math.max(300, 280 + dist * 0.55)) * jitter(j)
-  j.flick = { from: j.pos, to, t0: performance.now(), T, last: to === max || to === 0 }
+  // Longer flicks take longer, but none is quick: even a short one is most
+  // of a second, and a full screen is nearer two.
+  const T = Math.min(2000, Math.max(700, 500 + dist * 1.4)) * jitter(j)
+  j.flick = { from: j.pos, to, t0: performance.now(), T, curve: glide, last: to === max || to === 0 }
   j.raf = requestAnimationFrame(tickNatural)
 }
 
@@ -211,7 +227,7 @@ function tickNatural (now) {
   const f = j && j.flick
   if (!f) return
   const t = Math.min(1, (now - f.t0) / f.T)
-  j.pos = t < 1 ? f.from + (f.to - f.from) * easeOut(t) : f.to   // land exactly
+  j.pos = t < 1 ? f.from + (f.to - f.from) * f.curve(t) : f.to   // land exactly
   j.el.scrollTo({ top: j.pos, behavior: 'instant' })
   if (t < 1) { j.raf = requestAnimationFrame(tickNatural); return }
 
@@ -227,7 +243,7 @@ function truncateFlick (j) {
   if (!f) return
   const remaining = f.to - j.pos
   const tail = Math.sign(remaining) * Math.min(Math.abs(remaining), Math.max(24, Math.abs(remaining) * 0.3))
-  j.flick = { from: j.pos, to: j.pos + tail, t0: performance.now(), T: 220, last: false }
+  j.flick = { from: j.pos, to: j.pos + tail, t0: performance.now(), T: 400, curve: easeOut, last: false }
 }
 
 // --- shared ---
