@@ -1,0 +1,73 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>blank recorder</title>
+<script>
+  // The encoder. Main hands this window the stage as its display source
+  // (see src/record.js), so getDisplayMedia here never shows a picker.
+  //
+  // The window's rounded corners come through the capture as black, so the
+  // frames go through a canvas: a matte is painted first, then the page is
+  // drawn inside the same rounded rectangle the stage clips to.
+  let rec = null
+  let stream = null
+  let timer = 0
+
+  recorder.onStart(async ({ fps, bitrate, matte, radius, cssWidth }) => {
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: fps, max: fps } },
+        audio: false,
+        cursor: 'never', surfaceSwitching: 'exclude', selfBrowserSurface: 'exclude'   // a page, not a screencast
+      })
+      const track = stream.getVideoTracks()[0]
+      const video = document.createElement('video')
+      video.srcObject = stream
+      video.muted = true
+      await video.play()
+      const { width: W, height: H } = track.getSettings()
+      const scale = W / cssWidth
+      const r = radius * scale
+
+      const canvas = document.createElement('canvas')
+      canvas.width = W; canvas.height = H
+      const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
+      const out = canvas.captureStream(0)
+      const outTrack = out.getVideoTracks()[0]
+
+      const draw = () => {
+        ctx.fillStyle = matte
+        ctx.fillRect(0, 0, W, H)
+        if (r > 0) {
+          ctx.save()
+          ctx.beginPath()
+          ctx.roundRect(0, 0, W, H, r)
+          ctx.clip()
+          ctx.drawImage(video, 0, 0, W, H)
+          ctx.restore()
+        } else ctx.drawImage(video, 0, 0, W, H)
+        outTrack.requestFrame()
+      }
+      // A hidden window gets no requestAnimationFrame; a timer with
+      // background throttling off keeps the cadence.
+      timer = setInterval(draw, 1000 / fps)
+
+      rec = new MediaRecorder(out, { mimeType: 'video/mp4;codecs=avc1.64002A', videoBitsPerSecond: bitrate })
+      rec.ondataavailable = (e) => { if (e.data.size) e.data.arrayBuffer().then((b) => recorder.chunk(b)) }
+      rec.onerror = (e) => recorder.failed(String(e.error || e))
+      rec.onstop = () => {
+        clearInterval(timer)
+        stream.getTracks().forEach((t) => t.stop())
+        outTrack.stop()
+        setTimeout(() => recorder.done(), 300)   // chunks in flight land first
+      }
+      track.onended = () => { if (rec && rec.state === 'recording') rec.stop() }   // window went away mid-take
+      rec.start(250)
+      recorder.started()
+    } catch (e) {
+      clearInterval(timer)
+      recorder.failed(e && e.message ? e.message : String(e))
+    }
+  })
+
+  recorder.onStop(() => { if (rec && rec.state === 'recording') rec.stop() })
+</script>

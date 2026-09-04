@@ -87,6 +87,13 @@
     padding:4px 5px 4px 7px; font:12px var(--font); color:var(--dim); opacity:.55; cursor:default;
   }
 
+  /* Record. A dot and a word; while a take runs the pill fills, lit, and
+     the word becomes the clock. The outcome shows for a moment after. */
+  .btn.rec .dot { width:8px; height:8px; border-radius:50%; background:currentColor; flex:none; }
+  .btn.rec.on { background:var(--pill); color:var(--accent); }
+  .btn.rec.on:hover { color:var(--ink); }
+  .btn.rec.done { color:var(--ink); }
+
   /* Scroll. Steady or Natural selects; the play at the end of the well
      goes. While the page moves the play is the stop, lit, with the readout
      inside it. The presets well opens beside it for the selected mode. */
@@ -117,6 +124,13 @@
     </button>
   </div>
   <div class="group" id="presets" hidden></div>
+
+  <!-- Record. With a scroll mode selected it runs the whole take: record,
+       scroll to the end, settle, stop, reveal the file. Otherwise it records
+       until pressed again. The page's cursor is hidden for the take. -->
+  <div class="group" id="record" hidden>
+    <button class="btn rec" id="recBtn" title="Record the page"><span class="dot"></span><span class="word">Record</span></button>
+  </div>
 
   <div class="group">
     <button class="btn" id="size">— × —</button>
@@ -185,6 +199,9 @@
     if (customMode === 'size') {
       const m = v.match(/(\d{2,5})\s*[x×,\s]\s*(\d{2,5})/)
       if (m) stage.setSize({ w: +m[1], h: +m[2] })
+    } else if (customMode === 'matte') {
+      const m = v.match(/^#?([0-9a-f]{6})$/i)
+      if (m) stage.setMatte('#' + m[1])
     } else if (customMode && customMode.startsWith('scroll:')) {
       const key = customMode.slice(7)
       let n = parseFloat(v)
@@ -291,11 +308,21 @@
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); stage.scrollMenu() })
   }
 
+  // --- record -----------------------------------------------------------------
+  const recBtn = $('recBtn')
+  recBtn.onclick = () => {
+    const r = state && state.recording
+    if (r && r.phase === 'failed' && state.recordPermission !== 'granted') { stage.recordPermission(); return }
+    stage.record({ withScroll: isArmed() })
+    back()
+  }
+
   $('size').onclick = () => stage.sizeMenu()
   $('more').onclick = () => stage.moreMenu()
 
   stage.onFocusInput(() => input.focus())
   stage.onCustomSize(() => askFor('size', 'Custom size — e.g. 1512 × 982'))
+  stage.onCustomMatte(() => askFor('matte', 'Matte colour as hex — e.g. #f4f2ee'))
   stage.onCustomScroll((key) => askFor('scroll:' + key, {
     speed: 'Scroll speed in px/s — e.g. 120',
     ease: 'Easing ramp in ms — e.g. 600',
@@ -332,6 +359,7 @@
     $('radius').hidden = !s.features.radius || !s.target   // nothing to round yet; its well hides with it
     radius.sync()
     renderScroll(s)
+    renderRecord(s)
 
     const size = $('size')
     size.hidden = !s.size
@@ -345,6 +373,39 @@
     }
 
     fitBar()
+  }
+
+  // The record button: a clock while a take runs, the outcome for a moment
+  // after, otherwise the word.
+  let clock = null
+  function renderRecord (s) {
+    clearInterval(clock)
+    const g = $('record')
+    g.hidden = !s.target
+    if (g.hidden) return
+    const r = s.recording
+    const word = recBtn.querySelector('.word')
+    recBtn.classList.toggle('on', !!r && r.phase === 'recording')
+    recBtn.classList.toggle('done', !!r && r.phase !== 'recording')
+    if (r && r.phase === 'recording') {
+      const tick = () => {
+        const t = Math.floor((Date.now() - r.since) / 1000)
+        word.textContent = `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`
+      }
+      tick()
+      clock = setInterval(tick, 250)
+      recBtn.title = 'Stop recording'
+    } else if (r && r.phase === 'saved') {
+      word.textContent = 'Saved'
+      recBtn.title = r.detail
+    } else if (r && r.phase === 'failed') {
+      const needs = s.recordPermission !== 'granted'
+      word.textContent = needs ? 'Allow recording ↗' : 'Couldn’t record'
+      recBtn.title = needs ? 'blank needs Screen Recording permission · click to open System Settings' : r.detail
+    } else {
+      word.textContent = 'Record'
+      recBtn.title = isArmed() ? 'Record a take: scroll to the end, then stop and save' : 'Record the page until pressed again'
+    }
   }
 
   // The window grows to fit whatever is open and shrinks back when it

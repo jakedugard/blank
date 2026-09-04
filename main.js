@@ -6,6 +6,7 @@ const fs = require('fs')
 const PRESETS = require('./src/presets')
 const { serve, watch } = require('./src/server')
 const { TargetStore } = require('./src/targets')
+const record = require('./src/record')
 
 // The window is larger than the visual bar so the CSS shadow has room to fall.
 // INSET is that transparent margin; gap is measured from the visible edge.
@@ -424,6 +425,8 @@ function pushState () {
     scroll: { ...scrollSettings(), preset: scrollPreset() },
     scrollPresets: Object.fromEntries(Object.entries(SCROLL_PRESETS).map(([m, l]) => [m, l.map(p => p.name)])),
     scrolling: scrollState,
+    recording: recState,
+    recordPermission: record.permission(),
     maxFit: { w: work.width, h: work.height },
     recents: store.all().slice(0, 8).map(r => ({ id: r.id, name: r.name }))
   }
@@ -570,7 +573,9 @@ function hookScrollEvents (wc) {
 
 ipcMain.on('scroll:state', (e, st) => {
   if (!view || e.sender !== view.webContents) return
+  const wasActive = !!(scrollState && scrollState.active)
   scrollState = st
+  if (wasActive && !st.active) onScrollEnded()
   pushState()
 })
 
@@ -701,7 +706,8 @@ function popupMoreMenu () {
     { label: 'Reload', accelerator: 'Cmd+R', enabled: !!t, click: () => view && view.webContents.reload() },
     { type: 'separator' },
     ...(FEATURES.scroll ? [{ label: 'Auto-scroll', submenu: scrollSubmenu() }] : []),
-    ...(FEATURES.scroll ? [{ type: 'separator' }] : []),
+    { label: 'Recording', submenu: recordingSubmenu() },
+    { type: 'separator' },
     { label: 'Open File or Folder…', accelerator: 'Cmd+O', click: pickTarget },
     { label: 'Close Page', accelerator: 'Cmd+Shift+W', enabled: !!t, click: closeTarget },
     { type: 'separator' },
@@ -859,6 +865,73 @@ ipcMain.on('bar:width', (_e, w) => {
   else bar.setBounds({ x: Math.round(b.x + (b.width - next) / 2), y: b.y, width: next, height: BAR.h })
 })
 
+// --- recording ----------------------------------------------------------------
+// A take records the stage window (see src/record.js). With a scroll mode
+// selected in the bar, Record runs the whole thing: record, scroll to the
+// end, settle, stop, reveal the file. The cursor is hidden on the page for
+// the length of the take, since the capture would otherwise draw it.
+
+let recState = null    // null | { phase: 'recording' | 'saved' | 'failed', detail, since }
+let recTake = null     // { withScroll } while a take is under way
+let recCursorKey = null
+let recClear = null
+
+function startRecording ({ withScroll = false } = {}) {
+  if (record.active() || !current.target) return
+  clearTimeout(recClear)
+  recTake = { withScroll }
+  record.start({
+    stage, preload: path.join(__dirname, 'ui', 'preload.js'), name: current.target.name,
+    radius: FEATURES.radius ? store.radius() : 0, matte: store.matte(),
+    onState: async (phase, detail) => {
+      recState = { phase, detail, since: Date.now() }
+      if (phase === 'recording') {
+        if (view && !view.webContents.isDestroyed()) {
+          recCursorKey = await view.webContents.insertCSS('* { cursor: none !important; }').catch(() => null)
+        }
+        if (recTake && recTake.withScroll) startScroll(1)
+      } else {
+        recTake = null
+        if (recCursorKey && view && !view.webContents.isDestroyed()) view.webContents.removeInsertedCSS(recCursorKey).catch(() => {})
+        recCursorKey = null
+        if (phase === 'saved') shell.showItemInFolder(detail)
+        // The outcome shows in the bar for a moment, then the button is itself again.
+        recClear = setTimeout(() => { recState = null; pushState() }, phase === 'saved' ? 2500 : 4000)
+      }
+      pushState()
+    }
+  })
+}
+function stopRecording () { record.stop() }
+function toggleRecording (opts) { record.active() ? stopRecording() : startRecording(opts) }
+
+// A coupled take ends when the scroll does, after the page has settled.
+function onScrollEnded () {
+  if (recTake && recTake.withScroll && record.active()) setTimeout(stopRecording, 700)
+}
+
+ipcMain.on('rec:started', record.started)
+ipcMain.on('rec:chunk', (_e, b) => record.chunk(b))
+ipcMain.on('rec:done', record.done)
+ipcMain.on('rec:failed', (_e, m) => record.failed(m))
+ipcMain.handle('stage:record', (_e, opts) => toggleRecording(opts || {}))
+ipcMain.handle('stage:recordPermission', () => record.openPermissionSettings())
+ipcMain.handle('stage:setMatte', (_e, c) => { if (/^#[0-9a-f]{6}$/i.test(c)) { store.setMatte(c.toLowerCase()); pushState() } })
+
+function recordingSubmenu () {
+  const matte = store.matte()
+  const pick = (label, c) => ({ label, type: 'radio', checked: matte.toLowerCase() === c, click: () => { store.setMatte(c); pushState() } })
+  return [
+    { label: `Matte: ${matte}`, submenu: [
+      pick('White', '#ffffff'), pick('Black', '#000000'),
+      { type: 'separator' },
+      { label: 'Custom…', click: () => bar && bar.webContents.send('custom-matte') }
+    ] },
+    { label: 'Open Recordings Folder', click: () => shell.openPath(record.folder()) },
+    ...(record.permission() === 'granted' ? [] : [{ label: 'Allow Screen Recording…', click: record.openPermissionSettings }])
+  ]
+}
+
 ipcMain.on('drag:start', () => {
   if (!stage || stage.isDestroyed() || !bar || bar.isDestroyed()) return
   dragging = true
@@ -930,7 +1003,8 @@ app.whenReady().then(async () => {
       stage: () => stage, view: () => view, bar: () => bar,
       startScroll, scrollCmd, setScroll, setRadius, applySize, openPath, closeTarget, storeRadius: () => store.radius(), toggleRig,
       storeBarInCaptures: () => store.barInCaptures(), scrollSettingsNow: scrollSettings, setBarInCaptures: (on) => { store.setBarInCaptures(on); applyBarCapture() },
-      scrollState: () => scrollState
+      scrollState: () => scrollState,
+      startRecording, stopRecording, recState: () => recState, startScroll
     })
   }
 })

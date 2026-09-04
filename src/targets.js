@@ -43,6 +43,13 @@ class TargetStore {
     this.save()
   }
 
+  // What a recording paints behind the page's rounded corners.
+  matte () { return this.data.matte || '#ffffff' }
+  setMatte (c) {
+    this.data.matte = c
+    this.save()
+  }
+
   // Corner radius is a house style rather than a per-project fact, so it's
   // stored once and applied to everything.
   radius () { return Number.isFinite(this.data.radius) ? this.data.radius : 12 }

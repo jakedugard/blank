@@ -6,6 +6,8 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron')
 // can neither see nor call it.
 const isOwnUI =
   location.protocol === 'file:' && /\/bar\.html$/.test(location.pathname)
+const isRecorder =
+  location.protocol === 'file:' && /\/recorder\.html$/.test(location.pathname)
 
 // ⌘-drag moves the whole rig from anywhere on the page. Capture phase so page
 // handlers can't swallow it first.
@@ -346,6 +348,9 @@ if (isOwnUI) {
     scrollStop: ()     => ipcRenderer.invoke('stage:scrollStop'),
     scrollAs:   (m, d) => ipcRenderer.invoke('stage:scrollAs', m, d),
     scrollPreset: (n)  => ipcRenderer.invoke('stage:scrollPreset', n),
+    record:     (o)    => ipcRenderer.invoke('stage:record', o),
+    recordPermission: () => ipcRenderer.invoke('stage:recordPermission'),
+    setMatte:   (c)    => ipcRenderer.invoke('stage:setMatte', c),
     setBarWidth: (w)   => ipcRenderer.send('bar:width', w),
     focusStage: ()     => ipcRenderer.invoke('stage:focusStage'),
 
@@ -362,6 +367,19 @@ if (isOwnUI) {
     onState:      (fn) => ipcRenderer.on('state', (_e, s) => fn(s)),
     onFocusInput: (fn) => ipcRenderer.on('focus-input', fn),
     onCustomSize:   (fn) => ipcRenderer.on('custom-size', fn),
-    onCustomScroll: (fn) => ipcRenderer.on('custom-scroll', (_e, key) => fn(key))
+    onCustomScroll: (fn) => ipcRenderer.on('custom-scroll', (_e, key) => fn(key)),
+    onCustomMatte:  (fn) => ipcRenderer.on('custom-matte', fn)
+  })
+}
+
+// The hidden encoder window: main starts and stops it, it streams chunks back.
+if (isRecorder) {
+  contextBridge.exposeInMainWorld('recorder', {
+    onStart: (fn) => ipcRenderer.on('rec:start', (_e, opts) => fn(opts)),
+    onStop:  (fn) => ipcRenderer.on('rec:stop', () => fn()),
+    started: ()   => ipcRenderer.send('rec:started'),
+    chunk:   (b)  => ipcRenderer.send('rec:chunk', b),
+    done:    ()   => ipcRenderer.send('rec:done'),
+    failed:  (m)  => ipcRenderer.send('rec:failed', m)
   })
 }
