@@ -15,6 +15,7 @@
     --ink:#f4f2ee; --dim:rgba(255,255,255,.84);
     --bar:rgba(0,0,0,.6); --bar-hot:rgba(20,20,20,.7);
     --rule:rgba(255,255,255,.07); --accent:#ff8a72;
+    --well:rgba(255,255,255,.06); --pill:rgba(255,255,255,.14);
   }
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; background:transparent; overflow:hidden; }
@@ -53,7 +54,6 @@
   .btn:hover { color:var(--ink); }
   input::selection { background:rgba(255,255,255,.22); }
   .btn.over { color:var(--accent); }
-  .btn.live { color:var(--accent); }
   .btn[hidden] { display:none; }       /* display:flex above would otherwise win */
 
   .num { cursor:text; gap:6px; }
@@ -69,16 +69,24 @@
      -apple-system. Regular weight is the thin cut at this size. */
   .sf { font:400 12px/1 var(--font); flex:none; }
 
-  /* Scroll: a label and its two options, always in view. Click one and
-     the page moves; ⌥-click and it moves up. While it moves the group is
-     the readout, lit, and a click there stops. */
-  .scroll { display:flex; align-items:center; flex:none; gap:2px; }
-  .scroll[hidden] { display:none; }    /* display:flex would otherwise win, as with .btn */
-  .scroll .label { color:var(--dim); opacity:.55; padding:5px 4px 5px 9px; cursor:default; }
-  .scroll .readout { display:none; }
-  .scroll.live .label, .scroll.live .choices { display:none; }
-  .scroll.live .readout { display:flex; color:var(--accent); }
-  .scroll .readout:hover { color:var(--ink); }
+  /* Groups. Each category is a well with its options inside; the active
+     option is the filled pill. The label, where there is one, is the
+     quietest thing in the well. A well with nothing showing hides itself. */
+  .group {
+    display:flex; align-items:center; gap:2px; flex:none;
+    padding:3px; border-radius:9px; background:var(--well);
+  }
+  .group[hidden], .group:not(:has(> .btn:not([hidden]))) { display:none; }
+  .group .btn { padding:4px 8px; border-radius:6px; }
+  .group .btn.on { background:var(--pill); color:var(--ink); }
+  .group .label { color:var(--dim); opacity:.55; padding:4px 5px 4px 7px; cursor:default; }
+
+  /* Scroll. Steady or Natural starts; the running one is the filled pill,
+     lit, with the readout inside it, and a click there stops. */
+  .scroll .btn .sf, .scroll .btn .status { display:none; }
+  .scroll .btn.on { color:var(--accent); }
+  .scroll .btn.on .sf, .scroll .btn.on .status { display:inline; }
+  .scroll .btn.on:hover { color:var(--ink); }
 </style>
 
 <div class="bar" id="bar">
@@ -88,29 +96,32 @@
   </div>
 
   <!-- Auto-scroll. Steady or Natural starts a scroll down, ⌥-click up.
-       While it runs, the readout counts down the pre-roll, shows the
-       direction, or says paused; click it to stop. Right-click the group
-       for the numbers, pre-roll and the rest. -->
-  <div class="scroll" id="scroll" hidden>
+       The running one shows the readout: the pre-roll countdown, the
+       direction, or paused. Click it to stop. Right-click the group for the
+       numbers, pre-roll and the rest. -->
+  <div class="group scroll" id="scroll" hidden>
     <span class="label" title="Auto-scroll · right-click to fine-tune">Scroll</span>
-    <span class="choices" style="display:contents">
-      <button class="btn" data-mode="steady" title="One speed, start to finish · ⌥-click scrolls up">Steady</button>
-      <button class="btn" data-mode="natural" title="A flick, a rest, a flick · ⌥-click scrolls up">Natural</button>
-    </span>
-    <button class="btn readout" title="Stop · esc">
-      <span class="sf" aria-hidden="true">&#x1006F7;</span><span id="scrollStatus"></span>
+    <button class="btn" data-mode="steady" title="One speed, start to finish · ⌥-click scrolls up">
+      <span class="sf" aria-hidden="true">&#x1006F7;</span><span class="name">Steady</span><span class="status"></span>
+    </button>
+    <button class="btn" data-mode="natural" title="A flick, a rest, a flick · ⌥-click scrolls up">
+      <span class="sf" aria-hidden="true">&#x1006F7;</span><span class="name">Natural</span><span class="status"></span>
     </button>
   </div>
 
-  <button class="btn" id="size">— × —</button>
+  <div class="group">
+    <button class="btn" id="size">— × —</button>
+  </div>
   <!-- Corner radius is a number, so it's edited as one: click to type,
        drag the icon to scrub, ↑↓ to step (⇧ for tens). -->
-  <label class="btn num" id="radius" title="Corner radius · drag icon to scrub · ↑↓ to step">
-    <svg id="radiusGrip" width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
-      <path d="M10.5 0.5 H4.5 A4 4 0 0 0 0.5 4.5 V10.5"
-            fill="none" stroke="currentColor" stroke-width="1.2"/>
-    </svg><input id="radiusIn" inputmode="numeric" spellcheck="false" autocomplete="off" value="0">
-  </label>
+  <div class="group">
+    <label class="btn num" id="radius" title="Corner radius · drag icon to scrub · ↑↓ to step">
+      <svg id="radiusGrip" width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
+        <path d="M10.5 0.5 H4.5 A4 4 0 0 0 0.5 4.5 V10.5"
+              fill="none" stroke="currentColor" stroke-width="1.2"/>
+      </svg><input id="radiusIn" inputmode="numeric" spellcheck="false" autocomplete="off" value="0">
+    </label>
+  </div>
   <button class="btn more" id="more" title="More"><span class="sf" aria-hidden="true">&#x100360;</span></button>
 </div>
 
@@ -246,10 +257,14 @@
 
   // --- auto-scroll ------------------------------------------------------------
   const scroll = $('scroll')
-  for (const b of scroll.querySelectorAll('[data-mode]')) {
-    b.onclick = (e) => { stage.scrollAs(b.dataset.mode, e.altKey ? -1 : 1); back() }
+  const modeBtns = [...scroll.querySelectorAll('[data-mode]')]
+  for (const b of modeBtns) {
+    b.onclick = (e) => {
+      if (b.classList.contains('on')) stage.scrollStop()
+      else stage.scrollAs(b.dataset.mode, e.altKey ? -1 : 1)
+      back()
+    }
   }
-  scroll.querySelector('.readout').onclick = () => { stage.scrollStop(); back() }
   scroll.addEventListener('contextmenu', (e) => { e.preventDefault(); stage.scrollMenu() })
 
   $('size').onclick = () => stage.sizeMenu()
@@ -284,7 +299,7 @@
       input.value = t ? (t.url || '') : ''
     }
 
-    $('radius').hidden = !s.features.radius || !s.target   // nothing to round yet
+    $('radius').hidden = !s.features.radius || !s.target   // nothing to round yet; its well hides with it
     radius.sync()
     renderScroll(s)
 
@@ -300,8 +315,9 @@
     }
   }
 
-  // While the page moves, the word gives way to the readout: a countdown
-  // through the pre-roll, then the mode and direction, or paused.
+  // While the page moves, the running mode is the filled pill and carries
+  // the readout: a countdown through the pre-roll, then the direction, or
+  // paused.
   let countdown = null
   function renderScroll (s) {
     const st = s.scrolling
@@ -311,22 +327,31 @@
     if (scroll.hidden) return
 
     const live = !!(st && st.active)
-    scroll.classList.toggle('live', live)
-    if (!live) return
+    let status = null
+    for (const b of modeBtns) {
+      const on = live && b.dataset.mode === st.mode
+      b.classList.toggle('on', on)
+      b.title = on ? 'Stop · esc' : b.dataset.mode === 'steady'
+        ? 'One speed, start to finish · ⌥-click scrolls up'
+        : 'A flick, a rest, a flick · ⌥-click scrolls up'
+      const el = b.querySelector('.status')
+      el.textContent = ''
+      if (on) status = el
+    }
+    if (!status) return
 
-    const status = $('scrollStatus')
-    const what = `${st.mode === 'natural' ? 'Natural' : 'Steady'} ${st.dir < 0 ? '↑' : '↓'}`
+    const arrow = st.dir < 0 ? ' ↑' : ' ↓'
     if (st.phase === 'preroll') {
       const tickDown = () => {
         const left = Math.max(0, st.until - Date.now())
-        status.textContent = `${what} in ${(left / 1000).toFixed(1)} s`
+        status.textContent = `${arrow} in ${(left / 1000).toFixed(1)} s`
       }
       tickDown()
       countdown = setInterval(tickDown, 100)
     } else if (st.phase === 'paused') {
-      status.textContent = `${what} paused`
+      status.textContent = `${arrow} paused`
     } else {
-      status.textContent = what
+      status.textContent = arrow
     }
   }
 </script>
