@@ -125,6 +125,18 @@
   </div>
   <div class="group" id="presets" hidden></div>
 
+  <!-- The numbers behind a preset, for Custom. Each is edited like the
+       radius: type, ↑↓ to step, drag the unit to scrub. Which show depends
+       on the mode; a running scroll picks changes up live. -->
+  <div class="group" id="numbers" hidden>
+    <label class="btn num" data-key="speed" title="Speed · ↑↓ to step · drag unit to scrub"><input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">px/s</span></label>
+    <label class="btn num" data-key="ease" title="Easing ramp · ↑↓ to step · drag unit to scrub"><input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">ms ease</span></label>
+    <label class="btn num" data-key="stride" title="Stride, as a share of the screen · ↑↓ to step · drag unit to scrub"><input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">% screen</span></label>
+    <label class="btn num" data-key="dwell" title="Dwell between flicks · ↑↓ to step · drag unit to scrub"><input inputmode="decimal" spellcheck="false" autocomplete="off"><span class="unit">s rest</span></label>
+    <label class="btn num" data-key="variation" title="Variation in stride, dwell and glide · ↑↓ to step · drag unit to scrub"><input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">% vary</span></label>
+    <label class="btn num" data-key="pace" title="Glide: how quick the hand is, as a share of the easy pace · ↑↓ to step · drag unit to scrub"><input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">% glide</span></label>
+  </div>
+
   <!-- Record. With a scroll mode selected it runs the whole take: record,
        scroll to the end, settle, stop, reveal the file. Otherwise it records
        until pressed again. The page's cursor is hidden for the take. -->
@@ -132,9 +144,14 @@
     <button class="btn rec" id="recBtn" title="Record the page"><span class="dot"></span><span class="word">Record</span></button>
   </div>
 
-  <div class="group">
+  <div class="group" id="sizeWell">
     <button class="btn" id="size">— × —</button>
+    <!-- Custom size: the two numbers, inline, until return or escape. -->
+    <label class="btn num" id="sizeW" hidden title="Width · ↑↓ to step"><input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">×</span></label>
+    <label class="btn num" id="sizeH" hidden title="Height · ↑↓ to step"><input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">px</span></label>
   </div>
+  <!-- The system colour panel, for a custom matte. -->
+  <input type="color" id="matteIn" style="position:absolute;left:-100px;top:-100px;width:1px;height:1px;opacity:0" tabindex="-1">
   <!-- Corner radius is a number, so it's edited as one: click to type,
        drag the icon to scrub, ↑↓ to step (⇧ for tens). -->
   <div class="group">
@@ -152,16 +169,12 @@
   const $ = (id) => document.getElementById(id)
   const barEl = $('bar'), input = $('input')
   let state = null
-  let customMode = null        // 'size' | 'scroll:<key>' while the input captures a value
   let editing = false
   let armed = null             // target id whose scroll well is open
+  let numbersFor = null        // target id whose numbers well is open (Custom)
 
   const back = () => stage.focusStage()
 
-  function resetInput () {
-    customMode = null
-    input.placeholder = 'Drop a file or folder, or paste a URL'
-  }
 
   // --- drag: anywhere on the bar that isn't a control -----------------------
   barEl.addEventListener('pointerdown', (e) => {
@@ -187,34 +200,15 @@
 
   // --- the one way in: type a path, paste a URL, or drop a file -------------
   input.addEventListener('focus', () => { editing = true; input.select() })
-  input.addEventListener('blur',  () => { editing = false; resetInput(); render(state) })
+  input.addEventListener('blur',  () => { editing = false; render(state) })
 
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { resetInput(); input.blur(); back(); return }
+    if (e.key === 'Escape') { input.blur(); back(); return }
     if (e.key !== 'Enter') return
-
     const v = input.value.trim()
     if (!v) return
-
-    if (customMode === 'size') {
-      const m = v.match(/(\d{2,5})\s*[x×,\s]\s*(\d{2,5})/)
-      if (m) stage.setSize({ w: +m[1], h: +m[2] })
-    } else if (customMode === 'matte') {
-      const m = v.match(/^#?([0-9a-f]{6})$/i)
-      if (m) stage.setMatte('#' + m[1])
-    } else if (customMode && customMode.startsWith('scroll:')) {
-      const key = customMode.slice(7)
-      let n = parseFloat(v)
-      // Seconds and percentages are friendlier to type than ms and fractions.
-      if (key === 'preroll' || key === 'dwell') n *= 1000
-      if ((key === 'stride' || key === 'variation') && (n > 3 || /%/.test(v))) n /= 100
-      if (Number.isFinite(n)) stage.setScroll({ [key]: n })
-    } else if (/^(\/|~|\.\/)/.test(v)) {
-      stage.openPath(v)
-    } else {
-      stage.openUrl(v)
-    }
-    resetInput()
+    if (/^(\/|~|\.\/)/.test(v)) stage.openPath(v)
+    else stage.openUrl(v)
     input.blur()
   })
 
@@ -273,6 +267,7 @@
   }
 
   const round = (v, d = 0) => { const f = 10 ** d; return Math.round(v * f) / f }
+  const scrollNow = (k) => (state && state.scroll) ? state.scroll[k] : null
 
   // --- corner radius ---
   const radius = numberControl({
@@ -282,17 +277,71 @@
     current: () => state ? state.radius : 0
   })
 
+  // --- the numbers behind a preset ---
+  // Stored units are px/s, ms, fraction, ms, fraction, factor; shown as
+  // px/s, ms, %, s, %, %.
+  const SPEC = {
+    speed:     { min: 5, max: 2000, step: 10, bigStep: 50, scrub: 2, show: (v) => Math.round(v), read: (n) => n },
+    ease:      { min: 0, max: 10000, step: 100, bigStep: 500, scrub: 5, show: (v) => Math.round(v), read: (n) => n },
+    stride:    { min: 0.1, max: 3, step: 0.05, bigStep: 0.25, scrub: 0.005, show: (v) => Math.round(v * 100), read: (n) => n / 100 },
+    dwell:     { min: 0, max: 30000, step: 100, bigStep: 500, scrub: 10, show: (v) => round(v / 1000, 2), read: (n) => n * 1000 },
+    variation: { min: 0, max: 1, step: 0.05, bigStep: 0.25, scrub: 0.005, show: (v) => Math.round(v * 100), read: (n) => n / 100 },
+    pace:      { min: 0.3, max: 2, step: 0.05, bigStep: 0.25, scrub: 0.005, show: (v) => Math.round(v * 100), read: (n) => n / 100 }
+  }
+  const BY_MODE = { steady: ['speed', 'ease'], natural: ['stride', 'dwell', 'variation', 'pace'] }
+  const numbers = $('numbers')
+  const nums = {}
+  for (const root of numbers.querySelectorAll('.num')) {
+    const key = root.dataset.key
+    nums[key] = numberControl({
+      root, grip: root.querySelector('.unit'), ...SPEC[key],
+      commit: (v) => stage.setScroll({ [key]: v }),
+      current: () => scrollNow(key) || 0
+    })
+  }
+
+  // --- custom size: two inline numbers ---
+  const sizeW = $('sizeW'), sizeH = $('sizeH')
+  const sizeNum = (root, k) => numberControl({
+    root, grip: root.querySelector('.unit'), min: 100, max: 8000, step: 1, bigStep: 10, scrub: 1,
+    show: (v) => Math.round(v), read: (n) => n,
+    commit: () => stage.setSize({ w: parseInt(sizeW.querySelector('input').value, 10), h: parseInt(sizeH.querySelector('input').value, 10) }),
+    current: () => (state && state.size) ? state.size[k] : 0
+  })
+  sizeNum(sizeW, 'w'); sizeNum(sizeH, 'h')
+  let sizing = false
+  function editSize (on) {
+    sizing = on
+    sizeW.hidden = sizeH.hidden = !on
+    $('size').hidden = on || !(state && state.size)
+    if (on) {
+      sizeW.querySelector('input').value = state.size.w
+      sizeH.querySelector('input').value = state.size.h
+      sizeW.querySelector('input').focus()
+    }
+    fitBar()
+  }
+  for (const el of [sizeW, sizeH]) {
+    el.querySelector('input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === 'Escape') setTimeout(() => editSize(false), 0)
+    })
+  }
+  $('sizeWell').addEventListener('focusout', () => setTimeout(() => { if (sizing && !$('sizeWell').contains(document.activeElement)) editSize(false) }, 0))
+
+  // --- matte: the system colour panel ---
+  const matteIn = $('matteIn')
+  matteIn.addEventListener('input', () => stage.setMatte(matteIn.value))
+
   // --- auto-scroll ------------------------------------------------------------
   const scroll = $('scroll')
   const play = $('play')
   const presets = $('presets')
   const modeBtns = [...scroll.querySelectorAll('[data-mode]')]
-  const scrollNow = (k) => (state && state.scroll) ? state.scroll[k] : null
   const isArmed = () => !!(state && state.target && armed === state.target.id)
   for (const b of modeBtns) {
     b.onclick = () => {
       const mode = b.dataset.mode
-      if (isArmed() && scrollNow('mode') === mode) { armed = null; render(state); return }
+      if (isArmed() && scrollNow('mode') === mode) { armed = null; numbersFor = null; render(state); return }
       armed = state.target.id
       if (scrollNow('mode') !== mode) stage.setScroll({ mode }); else render(state)
       back()
@@ -321,24 +370,17 @@
   $('more').onclick = () => stage.moreMenu()
 
   stage.onFocusInput(() => input.focus())
-  stage.onCustomSize(() => askFor('size', 'Custom size — e.g. 1512 × 982'))
-  stage.onCustomMatte(() => askFor('matte', 'Matte colour as hex — e.g. #f4f2ee'))
-  stage.onCustomScroll((key) => askFor('scroll:' + key, {
-    speed: 'Scroll speed in px/s — e.g. 120',
-    ease: 'Easing ramp in ms — e.g. 600',
-    preroll: 'Pre-roll in seconds — e.g. 2',
-    stride: 'Stride as a share of the screen — e.g. 0.5',
-    dwell: 'Dwell between flicks in seconds — e.g. 1.5',
-    variation: 'Variation, 0 to 1 — e.g. 0.3',
-    pace: 'Glide, as a factor on flick length — e.g. 0.7'
-  }[key]))
-
-  function askFor (mode, placeholder) {
-    customMode = mode
-    input.value = ''
-    input.placeholder = placeholder
-    input.focus()
-  }
+  stage.onCustomSize(() => { if (state && state.size) editSize(true) })
+  stage.onCustomMatte(() => { matteIn.value = (state && state.matte) || '#ffffff'; matteIn.click() })
+  // Custom… in the menu opens the numbers well, the same as the Custom pill.
+  stage.onCustomScroll((key) => {
+    if (!state || !state.target) return
+    armed = state.target.id
+    numbersFor = state.target.id
+    render(state)
+    const n = nums[key]
+    if (n && !n.field.closest('.num').hidden) n.field.focus()
+  })
 
   // --- render ---------------------------------------------------------------
   stage.onState((s) => {
@@ -352,9 +394,7 @@
     if (!s) return
     const t = s.target
 
-    if (!editing && !customMode) {
-      input.value = t ? (t.url || '') : ''
-    }
+    if (!editing) input.value = t ? (t.url || '') : ''
 
     $('radius').hidden = !s.features.radius || !s.target   // nothing to round yet; its well hides with it
     radius.sync()
@@ -362,7 +402,7 @@
     renderRecord(s)
 
     const size = $('size')
-    size.hidden = !s.size
+    size.hidden = !s.size || sizing
     if (s.size) {
       size.textContent = `${s.size.w} × ${s.size.h}`
       const over = s.size.w > s.maxFit.w || s.size.h > s.maxFit.h
@@ -445,6 +485,7 @@
     play.hidden = !open
     play.classList.toggle('live', live)
 
+    const custom = open && (sc.preset === 'Custom' || numbersFor === s.target.id)
     if (open && s.scrollPresets) {
       presets.hidden = false
       const names = s.scrollPresets[sc.mode] || []
@@ -455,11 +496,28 @@
           const b = document.createElement('button')
           b.className = 'btn'
           b.textContent = n
-          b.onclick = () => { stage.scrollPreset(n); back() }
+          b.onclick = () => { numbersFor = null; stage.scrollPreset(n); back() }
           return b
-        }))
+        }), (() => {
+          const b = document.createElement('button')
+          b.className = 'btn'
+          b.textContent = 'Custom'
+          b.title = 'The numbers behind the presets'
+          b.onclick = () => { numbersFor = s.target.id; render(state) }
+          return b
+        })())
       }
-      for (const b of presets.children) b.classList.toggle('on', b.textContent === sc.preset)
+      for (const b of presets.children) {
+        b.classList.toggle('on', b.textContent === 'Custom' ? custom : (!custom && b.textContent === sc.preset))
+      }
+    }
+    numbers.hidden = !custom
+    if (custom) {
+      const keys = BY_MODE[sc.mode] || BY_MODE.steady
+      for (const [key, n] of Object.entries(nums)) {
+        n.field.closest('.num').hidden = !keys.includes(key)
+        n.sync()
+      }
     }
 
     const status = $('scrollStatus')

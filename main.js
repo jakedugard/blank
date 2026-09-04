@@ -427,6 +427,7 @@ function pushState () {
     scrolling: scrollState,
     recording: recState,
     recordPermission: record.permission(),
+    matte: store.matte(),
     maxFit: { w: work.width, h: work.height },
     recents: store.all().slice(0, 8).map(r => ({ id: r.id, name: r.name }))
   }
@@ -585,11 +586,11 @@ function scrollSubmenu () {
   const active = !!(scrollState && scrollState.active)
   const natural = s.mode === 'natural'
 
-  const pick = (values, key, fmt) => values.map(v => ({
+  const pick = (values, key, fmt, custom = true) => values.map(v => ({
     label: fmt(v), type: 'checkbox', checked: s[key] === v, click: () => setScroll({ [key]: v })
-  })).concat({ type: 'separator' }, {
+  })).concat(custom ? [{ type: 'separator' }, {
     label: 'Custom…', click: () => bar && bar.webContents.send('custom-scroll', key)
-  })
+  }] : [])
   const ms = (v) => v ? `${v} ms` : 'None'
   const sec = (v) => v ? `${v / 1000} s` : 'None'
   const pct = (v) => v ? `${Math.round(v * 100)}%` : 'None'
@@ -625,7 +626,7 @@ function scrollSubmenu () {
     ...presets,
     { type: 'separator' },
     ...settings,
-    { label: `Pre-roll: ${sec(s.preroll)}`, submenu: pick([0, 500, 1000, 2000, 3000], 'preroll', sec) }
+    { label: `Pre-roll: ${sec(s.preroll)}`, submenu: pick([0, 500, 1000, 2000, 3000], 'preroll', sec, false) }
   ]
 }
 
@@ -767,6 +768,17 @@ function updateItem () {
 // --- menu bar ---------------------------------------------------------------
 // blank lives in the menu bar, not the Dock. Click the icon to summon the rig
 // or put it away; right-click for the few things that aren't in the bar.
+
+// The bar floats above everything only while blank is the active app. In
+// another app it's an ordinary window, behind whatever you're doing; a click
+// on it brings blank, page included, back to the front.
+function barFloats (on) {
+  if (bar && !bar.isDestroyed()) bar.setAlwaysOnTop(on, 'floating')
+}
+app.on('browser-window-focus', () => barFloats(true))
+app.on('browser-window-blur', () => {
+  setTimeout(() => { if (!BrowserWindow.getFocusedWindow()) barFloats(false) }, 50)
+})
 
 function rigVisible () {
   return !!(bar && !bar.isDestroyed() && bar.isVisible())
