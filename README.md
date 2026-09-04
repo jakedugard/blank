@@ -58,7 +58,7 @@ folder instead. Watching that folder gives live reload for free.
 
 ## Auto-scroll
 
-A capture that scrolls by hand always looks scrolled by hand. The **▼** in
+A capture that scrolls by hand always looks scrolled by hand. The **play** button in
 the bar scrolls the page down at a set speed; **⌥-click** it to scroll up.
 While the page moves the button becomes the stop and the readout beside it
 counts down the pre-roll, shows the direction, or says paused. Click it again
