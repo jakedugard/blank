@@ -73,6 +73,7 @@
      Steady and Natural; click one and the page moves. While it moves the
      same spot is the readout, lit, and a click there stops. */
   .scroll { display:flex; align-items:center; flex:none; }
+  .scroll[hidden] { display:none; }    /* display:flex would otherwise win, as with .btn */
   .scroll .choices { display:none; }
   .scroll:hover:not(.live) .word { display:none; }
   .scroll:hover:not(.live) .choices { display:flex; }
