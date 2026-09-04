@@ -707,8 +707,17 @@ function popupMoreMenu () {
     { type: 'separator' },
     barCaptureItem(),
     { label: 'Hide blank', accelerator: 'Cmd+.', click: hideRig },
+    { type: 'separator' },
+    aboutItem(),
     ...(updateReady ? [{ type: 'separator' }, updateItem()] : [])
   ]).popup({ window: bar })
+}
+
+// The one link out: the project page, where the story, the source and a
+// way to say thanks live. The arrow says it leaves the app.
+const ABOUT_URL = 'https://github.com/jakedugard/blank'
+function aboutItem () {
+  return { label: `About blank  ↗`, click: () => shell.openExternal(ABOUT_URL) }
 }
 
 // --- updates ----------------------------------------------------------------
@@ -798,6 +807,8 @@ function trayMenu () {
       click: (mi) => app.setLoginItemSettings({ openAtLogin: mi.checked })
     },
     { label: 'Check for Updates…', enabled: app.isPackaged, click: checkForUpdatesNow },
+    { type: 'separator' },
+    aboutItem(),
     { type: 'separator' },
     { label: 'Quit blank', accelerator: 'Cmd+Q', click: () => app.quit() }
   ])
