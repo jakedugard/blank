@@ -1,13 +1,13 @@
 {
   "name": "blank",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A blank window for capturing web work",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --arm64",
     "install-app": "npm run pack && rm -rf /Applications/Blank.app && cp -R dist/mac-arm64/Blank.app /Applications/Blank.app",
-    "release": "APPLE_KEYCHAIN_PROFILE=blank electron-builder --mac --universal --publish never"
+    "release": "GH_TOKEN=$(gh auth token) APPLE_KEYCHAIN_PROFILE=blank electron-builder --mac --universal --publish always"
   },
   "devDependencies": {
     "electron": "^44.1.1",
@@ -63,7 +63,11 @@
     "publish": {
       "provider": "github",
       "owner": "jakedugard",
-      "repo": "blank"
+      "repo": "blank",
+      "releaseType": "release"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

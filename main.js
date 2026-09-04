@@ -1,4 +1,5 @@
 const { app, BrowserWindow, WebContentsView, ipcMain, dialog, screen, Menu, Tray, nativeImage, shell } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const path = require('path')
 const fs = require('fs')
 
@@ -565,8 +566,47 @@ function popupMoreMenu () {
     { label: 'Close Page', accelerator: 'Cmd+Shift+W', enabled: !!t, click: closeTarget },
     { type: 'separator' },
     barCaptureItem(),
-    { label: 'Hide Blank', accelerator: 'Cmd+.', click: hideRig }
+    { label: 'Hide Blank', accelerator: 'Cmd+.', click: hideRig },
+    ...(updateReady ? [{ type: 'separator' }, updateItem()] : [])
   ]).popup({ window: bar })
+}
+
+// --- updates ----------------------------------------------------------------
+// Checks the GitHub release feed on launch and every few hours, downloads
+// quietly, and offers "Update to x.y.z" in the menus. Nothing interrupts a
+// recording: the swap only happens when you choose it, or on quit.
+
+let updateReady = null   // { version } once a build is downloaded and waiting
+
+function setupUpdates () {
+  if (!app.isPackaged) return             // dev runs have nothing to update
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.logger = null
+  autoUpdater.on('update-downloaded', (info) => { updateReady = { version: info.version } })
+  autoUpdater.on('error', (e) => console.log('[blank] update check failed:', e.message))
+  autoUpdater.checkForUpdates().catch(() => {})
+  setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000)
+}
+
+async function checkForUpdatesNow () {
+  if (!app.isPackaged) return
+  try {
+    const r = await autoUpdater.checkForUpdates()
+    const latest = r && r.updateInfo && r.updateInfo.version
+    if (!latest || latest === app.getVersion()) {
+      dialog.showMessageBox({ message: `Blank ${app.getVersion()} is up to date.`, buttons: ['OK'] })
+    }
+    // Otherwise the download is already under way; the menu will offer it.
+  } catch (e) {
+    dialog.showMessageBox({ type: 'warning', message: 'Couldn\u2019t check for updates.', detail: e.message, buttons: ['OK'] })
+  }
+}
+
+function updateItem () {
+  return updateReady
+    ? { label: `Update to ${updateReady.version}`, click: () => autoUpdater.quitAndInstall() }
+    : { label: `Blank ${app.getVersion()}`, enabled: false }
 }
 
 // --- menu bar ---------------------------------------------------------------
@@ -602,6 +642,8 @@ function trayMenu () {
   const t = current.target
   const login = app.isPackaged ? app.getLoginItemSettings().openAtLogin : false
   return Menu.buildFromTemplate([
+    updateItem(),
+    { type: 'separator' },
     { label: rigVisible() ? 'Hide Blank' : 'Show Blank', click: toggleRig },
     { type: 'separator' },
     { label: 'Open File or Folder…', click: () => { showRig(); pickTarget() } },
@@ -615,6 +657,7 @@ function trayMenu () {
       enabled: app.isPackaged,       // in dev this would register Electron itself
       click: (mi) => app.setLoginItemSettings({ openAtLogin: mi.checked })
     },
+    { label: 'Check for Updates…', enabled: app.isPackaged, click: checkForUpdatesNow },
     { type: 'separator' },
     { label: 'Quit Blank', accelerator: 'Cmd+Q', click: () => app.quit() }
   ])
@@ -701,6 +744,7 @@ app.whenReady().then(async () => {
   createStage()
   createBar()
   createTray()
+  setupUpdates()
 
   const cli = cliArgs(process.argv)
   if (FEATURES.radius && Number.isFinite(cli.radius)) setRadius(cli.radius)
