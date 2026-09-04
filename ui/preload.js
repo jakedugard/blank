@@ -170,9 +170,13 @@ function launch (m) {
   } else begin()
 }
 
-// Live changes while running; only speed matters mid-flight.
+// Live changes while running. Steady picks up speed on the next frame;
+// natural picks up stride, dwell and variation on the next flick.
 function tune (m) {
-  if (job && Number.isFinite(m.speed)) job.speed = m.speed
+  if (!job) return
+  for (const k of ['speed', 'ease', 'stride', 'dwell', 'variation']) {
+    if (Number.isFinite(m[k])) job[k] = m[k]
+  }
 }
 
 // --- steady ---
@@ -332,6 +336,7 @@ if (isOwnUI) {
     setScroll:  (p)    => ipcRenderer.invoke('stage:setScroll', p),
     scroll:     (dir)  => ipcRenderer.invoke('stage:scroll', dir),
     scrollStop: ()     => ipcRenderer.invoke('stage:scrollStop'),
+    setBarWidth: (w)   => ipcRenderer.send('bar:width', w),
     focusStage: ()     => ipcRenderer.invoke('stage:focusStage'),
 
     // Electron 32 removed File.path; this is the supported replacement.

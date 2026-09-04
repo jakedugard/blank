@@ -70,15 +70,16 @@ turns around. **Hold P** to pause and release to carry on. **Esc** stops, and
 so does touching the wheel or any scroll key — the moment you reach for the
 page it's yours again.
 
-Two ways to move, per target, chosen with a right-click on the button (or
-under ••• → Auto-scroll). The menu shows only the settings the chosen mode
-reads; the bar stays blank until a scroll is under way.
+Press play and the bar opens a strip beside it: the mode, and that mode's
+two or three numbers, edited like the radius (type, ↑↓, or drag the unit to
+scrub) and picked up by the page live. The address condenses to the page's
+name to make room, and the bar widens to fit; click the name to get the
+address back. The strip stays open through stop and go, until you leave it.
+Pre-roll, the locked rhythm and custom entry live one right-click away.
 
 **Steady** is one velocity, for showreels and long pages.
 
-- **Speed** in px/s (default 90). It also appears in the bar while a steady
-  scroll runs, where you can type it, step it with ↑↓, or drag the unit to
-  scrub, and the page picks up the change live.
+- **Speed** in px/s (default 90).
 - **Easing** — the ramp in ms (default 600). Starting, stopping, pausing and
   arriving at the end of the page all use the same smoothstep velocity ramp,
   so every change of motion reads as one gesture. The arrival ramp starts at

@@ -43,6 +43,10 @@
     color:var(--ink); text-overflow:ellipsis;
   }
   input::placeholder { color:var(--dim); }
+  /* With the scroll strip open the field condenses to the page's name and
+     gives the room to the settings. Click it to get the address back. */
+  .bar.strip .field { flex:0 0 auto; width:150px; }
+  .bar.strip .field input { color:var(--dim); }
 
   .btn {
     all:unset; flex:none; padding:5px 9px; border-radius:7px; cursor:pointer;
@@ -63,23 +67,24 @@
     color:inherit; font-variant-numeric:tabular-nums; cursor:text;
   }
   .num:focus-within { color:var(--ink); }
-  .num .unit { color:inherit; opacity:.7; margin-left:-2px; }
-  #speedIn { width:3.2ch; }
+  .num .unit { color:inherit; opacity:.7; margin-left:-2px; cursor:ew-resize; }
   #scrollStatus:empty { display:none; }
 
   /* SF Symbols, straight from the system font: private-use code points in
-     -apple-system. Weight follows the text weight, so semibold reads as the
-     symbol's medium at this size. */
+     -apple-system. Regular weight is the thin cut at this size. */
   .sf { font:400 12px/1 var(--font); flex:none; }
-  #scroll .unit { cursor:ew-resize; }   /* the unit is the scrub handle */
 
   /* The transport: one button that starts the scroll, then becomes the stop
      and the readout while the page moves. */
   .btn.play { padding:5px 7px; gap:6px; }
   .btn.play .stop, .btn.play.live .go { display:none; }
   .btn.play.live .stop { display:inline; }
-  /* Speed is a setting, so it sits after the transport and reads quieter. */
-  #scroll { margin-left:-6px; }
+
+  /* The strip: the mode and its numbers, only while scrolling is in hand. */
+  .strip-ctl { display:contents; }
+  .strip-ctl[hidden] { display:none; }
+  .rule { flex:none; width:1px; height:14px; background:var(--rule); margin:0 2px; }
+  .btn.mode { padding:5px 7px; }
 </style>
 
 <div class="bar" id="bar">
@@ -91,16 +96,34 @@
   <!-- Auto-scroll transport. Click scrolls down, ⌥-click up; while the page
        moves it's the stop, and the status beside it counts down the pre-roll,
        shows the direction, or says paused. Right-click for the full menu. -->
-  <button class="btn play" id="play" hidden
-          title="Scroll down · ⌥-click scrolls up · ⌥↓ ⌥↑ · hold P to pause · esc stops · right-click for settings">
+  <button class="btn play" id="play" hidden>
     <span class="sf go" aria-hidden="true">&#x100284;</span><span class="sf stop" aria-hidden="true">&#x1006F7;</span><span id="scrollStatus"></span>
   </button>
-  <!-- Auto-scroll speed: just the number, and only while a steady scroll is
-       under way, when changing it does something. Type it, ↑↓ to step, drag
-       the unit to scrub. No icon; the transport beside it says what it's for. -->
-  <label class="btn num" id="scroll" hidden title="Scroll speed · ↑↓ to step · drag px/s to scrub">
-    <input id="speedIn" inputmode="numeric" spellcheck="false" autocomplete="off" value="90"><span class="unit" id="speedGrip">px/s</span>
-  </label>
+
+  <!-- The strip. Numbers are edited like the radius: type, ↑↓ to step, drag
+       the unit to scrub. Which ones show depends on the mode; changes reach
+       the page live. -->
+  <div class="strip-ctl" id="strip" hidden>
+    <span class="rule"></span>
+    <button class="btn mode" id="mode" title="Switch mode">Steady</button>
+    <label class="btn num" data-key="speed" title="Speed · ↑↓ to step · drag unit to scrub">
+      <input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">px/s</span>
+    </label>
+    <label class="btn num" data-key="ease" title="Easing ramp · ↑↓ to step · drag unit to scrub">
+      <input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">ms</span>
+    </label>
+    <label class="btn num" data-key="stride" title="Stride, as a share of the screen · ↑↓ to step · drag unit to scrub">
+      <input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">% screen</span>
+    </label>
+    <label class="btn num" data-key="dwell" title="Dwell between flicks · ↑↓ to step · drag unit to scrub">
+      <input inputmode="decimal" spellcheck="false" autocomplete="off"><span class="unit">s rest</span>
+    </label>
+    <label class="btn num" data-key="variation" title="Variation in stride, dwell and glide · ↑↓ to step · drag unit to scrub">
+      <input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">% vary</span>
+    </label>
+    <span class="rule"></span>
+  </div>
+
   <button class="btn" id="size">— × —</button>
   <!-- Corner radius is a number, so it's edited as one: click to type,
        drag the icon to scrub, ↑↓ to step (⇧ for tens). -->
@@ -119,6 +142,8 @@
   let state = null
   let customMode = null        // 'size' | 'scroll:<key>' while the input captures a value
   let editing = false
+  let strip = false            // the scroll strip is open
+  let stripFor = null          // ...for this target id
 
   const back = () => stage.focusStage()
 
@@ -150,7 +175,7 @@
   })
 
   // --- the one way in: type a path, paste a URL, or drop a file -------------
-  input.addEventListener('focus', () => { editing = true; input.select() })
+  input.addEventListener('focus', () => { editing = true; setStrip(false); input.select() })
   input.addEventListener('blur',  () => { editing = false; resetInput(); render(state) })
 
   input.addEventListener('keydown', (e) => {
@@ -190,97 +215,103 @@
     if (f) { const p = stage.pathForFile(f); if (p) stage.openPath(p) }
   })
 
-  // --- controls -------------------------------------------------------------
-
-  // --- auto-scroll speed: inline number, same gestures as the radius -------
-  const speedIn = $('speedIn')
-  let speedPending = 0
-  const commitSpeed = (n) => {
-    n = Math.max(5, Math.min(2000, Math.round(n) || 90))
-    speedIn.value = n
-    cancelAnimationFrame(speedPending)
-    speedPending = requestAnimationFrame(() => stage.setScroll({ speed: n }))
-  }
-  speedIn.addEventListener('focus', () => { editing = true; speedIn.select() })
-  speedIn.addEventListener('blur', () => { editing = false; commitSpeed(parseInt(speedIn.value, 10)) })
-  speedIn.addEventListener('keydown', (e) => {
-    const cur = parseInt(speedIn.value, 10) || 0
-    const step = e.shiftKey ? 30 : 10
-    if (e.key === 'ArrowUp') { e.preventDefault(); commitSpeed(cur + step) }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); commitSpeed(cur - step) }
-    else if (e.key === 'Enter') { commitSpeed(cur); speedIn.blur(); back() }
-    else if (e.key === 'Escape') { speedIn.value = state && state.scroll ? state.scroll.speed : cur; speedIn.blur(); back() }
-  })
-  $('speedGrip').addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return
-    e.preventDefault()
-    e.stopPropagation()
-    const grip = e.currentTarget
-    grip.setPointerCapture(e.pointerId)
-    const ox = e.screenX
-    const base = parseInt(speedIn.value, 10) || 90
-    const move = (ev) => commitSpeed(base + Math.round(ev.screenX - ox) * 2)
-    const up = () => {
-      grip.removeEventListener('pointermove', move)
-      grip.removeEventListener('pointerup', up)
-      grip.removeEventListener('pointercancel', up)
+  // --- inline numbers -------------------------------------------------------
+  // One idiom for every number in the bar: type it, ↑↓ to step (⇧ for a
+  // bigger step), drag the grip to scrub. `show` maps the stored value to
+  // what's typed and `read` maps it back; `commit` sends it home.
+  function numberControl ({ root, grip, min, max, step, bigStep, scrub, show, read, commit, current }) {
+    const field = root.querySelector('input')
+    let pending = 0
+    const set = (v) => {
+      v = Math.max(min, Math.min(max, v))
+      field.value = show(v)
+      cancelAnimationFrame(pending)
+      pending = requestAnimationFrame(() => commit(v))
     }
-    grip.addEventListener('pointermove', move)
-    grip.addEventListener('pointerup', up)
-    grip.addEventListener('pointercancel', up)
+    const value = () => { const n = read(parseFloat(field.value)); return Number.isFinite(n) ? n : current() }
+    field.addEventListener('focus', () => { editing = true; field.select() })
+    field.addEventListener('blur', () => { editing = false; set(value()) })
+    field.addEventListener('keydown', (e) => {
+      const inc = e.shiftKey ? bigStep : step
+      if (e.key === 'ArrowUp') { e.preventDefault(); set(value() + inc) }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); set(value() - inc) }
+      else if (e.key === 'Enter') { set(value()); field.blur(); back() }
+      else if (e.key === 'Escape') { field.value = show(current()); field.blur(); back() }
+    })
+    grip.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return
+      e.preventDefault()
+      e.stopPropagation()                     // not a bar drag
+      grip.setPointerCapture(e.pointerId)
+      const ox = e.screenX
+      const base = value()
+      const move = (ev) => set(base + (ev.screenX - ox) * scrub)
+      const up = () => {
+        grip.removeEventListener('pointermove', move)
+        grip.removeEventListener('pointerup', up)
+        grip.removeEventListener('pointercancel', up)
+      }
+      grip.addEventListener('pointermove', move)
+      grip.addEventListener('pointerup', up)
+      grip.addEventListener('pointercancel', up)
+    })
+    return { field, sync: () => { if (document.activeElement !== field) field.value = show(current()) } }
+  }
+
+  const round = (v, d = 0) => { const f = 10 ** d; return Math.round(v * f) / f }
+  const scrollNow = (k) => (state && state.scroll) ? state.scroll[k] : 0
+
+  // --- corner radius ---
+  const radius = numberControl({
+    root: $('radius'), grip: $('radiusGrip'), min: 0, max: 120, step: 1, bigStep: 10, scrub: 0.5,
+    show: (v) => Math.round(v), read: (n) => n,
+    commit: (v) => stage.setRadius(Math.round(v)),
+    current: () => state ? state.radius : 0
   })
+
+  // --- the scroll strip's numbers ---
+  // Stored units are px/s, ms, fraction, ms, fraction; shown as px/s, ms, %, s, %.
+  const SPEC = {
+    speed:     { min: 5, max: 2000, step: 10, bigStep: 50, scrub: 2, show: (v) => Math.round(v), read: (n) => n },
+    ease:      { min: 0, max: 10000, step: 100, bigStep: 500, scrub: 5, show: (v) => Math.round(v), read: (n) => n },
+    stride:    { min: 0.1, max: 3, step: 0.05, bigStep: 0.25, scrub: 0.005, show: (v) => Math.round(v * 100), read: (n) => n / 100 },
+    dwell:     { min: 0, max: 30000, step: 100, bigStep: 500, scrub: 10, show: (v) => round(v / 1000, 1), read: (n) => n * 1000 },
+    variation: { min: 0, max: 1, step: 0.05, bigStep: 0.25, scrub: 0.005, show: (v) => Math.round(v * 100), read: (n) => n / 100 }
+  }
+  const BY_MODE = { steady: ['speed', 'ease'], natural: ['stride', 'dwell', 'variation'] }
+  const nums = {}
+  for (const root of document.querySelectorAll('#strip .num')) {
+    const key = root.dataset.key
+    nums[key] = numberControl({
+      root, grip: root.querySelector('.unit'), ...SPEC[key],
+      commit: (v) => stage.setScroll({ [key]: v }),
+      current: () => scrollNow(key)
+    })
+  }
+
   // --- auto-scroll transport -------------------------------------------------
   const play = $('play')
   play.onclick = (e) => {
     const live = !!(state && state.scrolling && state.scrolling.active)
     if (live) stage.scrollStop()
-    else stage.scroll(e.altKey ? -1 : 1)
+    else { setStrip(true); stage.scroll(e.altKey ? -1 : 1) }
     back()
   }
-  // Easing, pre-roll and the up/down commands live one right-click away.
-  for (const el of [play, $('scroll')]) {
+  $('mode').onclick = () => stage.setScroll({ mode: scrollNow('mode') === 'natural' ? 'steady' : 'natural' })
+  // Pre-roll, the locked rhythm and custom entry stay one right-click away.
+  for (const el of [play, $('strip')]) {
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); stage.scrollMenu() })
   }
-  $('size').onclick = () => stage.sizeMenu()
 
-  // --- corner radius: an inline number ---------------------------------------
-  const radiusIn = $('radiusIn')
-  let radiusPending = 0
-  const commitRadius = (n) => {
-    n = Math.max(0, Math.min(120, Math.round(n) || 0))
-    radiusIn.value = n
-    // Scrubbing fires per pointer move; one round trip per frame is plenty.
-    cancelAnimationFrame(radiusPending)
-    radiusPending = requestAnimationFrame(() => stage.setRadius(n))
+  // The strip opens on the first press and stays until you go back to the
+  // address, so you can tune, stop and go again without it moving.
+  function setStrip (on) {
+    strip = on
+    stripFor = on && state && state.target ? state.target.id : null
+    render(state)
   }
-  radiusIn.addEventListener('focus', () => { editing = true; radiusIn.select() })
-  radiusIn.addEventListener('blur', () => { editing = false; commitRadius(parseInt(radiusIn.value, 10)) })
-  radiusIn.addEventListener('keydown', (e) => {
-    const cur = parseInt(radiusIn.value, 10) || 0
-    const step = e.shiftKey ? 10 : 1
-    if (e.key === 'ArrowUp') { e.preventDefault(); commitRadius(cur + step) }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); commitRadius(cur - step) }
-    else if (e.key === 'Enter') { commitRadius(cur); radiusIn.blur(); back() }
-    else if (e.key === 'Escape') { radiusIn.value = state ? state.radius : cur; radiusIn.blur(); back() }
-  })
-  $('radiusGrip').addEventListener('pointerdown', (e) => {
-    if (e.button !== 0) return
-    e.preventDefault()
-    e.stopPropagation()                     // not a bar drag
-    const grip = e.currentTarget
-    grip.setPointerCapture(e.pointerId)
-    const ox = e.screenX
-    const base = parseInt(radiusIn.value, 10) || 0
-    const move = (ev) => commitRadius(base + Math.round((ev.screenX - ox) / 2))
-    const up = () => {
-      grip.removeEventListener('pointermove', move)
-      grip.removeEventListener('pointerup', up)
-      grip.removeEventListener('pointercancel', up)
-    }
-    grip.addEventListener('pointermove', move)
-    grip.addEventListener('pointerup', up)
-    grip.addEventListener('pointercancel', up)
-  })
+
+  $('size').onclick = () => stage.sizeMenu()
   $('more').onclick = () => stage.moreMenu()
 
   stage.onFocusInput(() => input.focus())
@@ -302,19 +333,28 @@
   }
 
   // --- render ---------------------------------------------------------------
-  stage.onState((s) => { state = s; render(s) })
+  stage.onState((s) => {
+    state = s
+    // A keyboard start opens the strip too; a new page closes it.
+    const live = !!(s && s.scrolling && s.scrolling.active)
+    if (live && !strip) { strip = true; stripFor = s.target && s.target.id }
+    if (strip && (!s.target || s.target.id !== stripFor)) { strip = false; stripFor = null }
+    render(s)
+  })
 
   function render (s) {
     if (!s) return
     const t = s.target
+    const showStrip = strip && !!t && s.features.scroll
 
+    barEl.classList.toggle('strip', showStrip)
     if (!editing && !customMode) {
-      input.value = t ? (t.url || '') : ''
+      input.value = t ? (showStrip ? (t.name || t.url || '') : (t.url || '')) : ''
     }
 
     $('radius').hidden = !s.features.radius || !s.target   // nothing to round yet
-    if (typeof s.radius === 'number' && document.activeElement !== radiusIn) radiusIn.value = s.radius
-    renderScroll(s)
+    radius.sync()
+    renderScroll(s, showStrip)
 
     const size = $('size')
     size.hidden = !s.size
@@ -326,26 +366,35 @@
         ? `Exceeds this display (${s.maxFit.w} × ${s.maxFit.h}) — a screen recording will clip it`
         : 'Change size'
     }
+
+    fitBar()
   }
 
   // While the page moves, the transport becomes the stop and the readout:
   // a status counts down the pre-roll, shows the direction, or says paused.
   let countdown = null
-  function renderScroll (s) {
+  function renderScroll (s, showStrip) {
     const st = s.scrolling
     const sc = s.scroll
     clearInterval(countdown)
     const hidden = !s.features.scroll || !s.target || !sc
     const live = !!(st && st.active)
     play.hidden = hidden
-    // Speed shows only while a steady scroll runs: that's when it does
-    // something, and the rest of the time the bar stays blank.
-    $('scroll').hidden = hidden || !live || sc.mode === 'natural'
+    $('strip').hidden = hidden || !showStrip
     if (hidden) return
 
     play.classList.toggle('live', live)
-    play.title = `${sc.mode === 'natural' ? 'Natural' : 'Steady'} scroll down · ⌥-click scrolls up · ⌥↓ ⌥↑ · hold P to pause · esc stops · right-click for settings`
-    if (document.activeElement !== speedIn) speedIn.value = sc.speed
+    const modeName = sc.mode === 'natural' ? 'Natural' : 'Steady'
+    play.title = `${modeName} scroll down · ⌥-click scrolls up · ⌥↓ ⌥↑ · hold P to pause · esc stops · right-click for pre-roll and more`
+
+    const mode = $('mode')
+    mode.textContent = modeName
+    mode.title = `Switch to ${sc.mode === 'natural' ? 'Steady' : 'Natural'}`
+    const keys = BY_MODE[sc.mode] || BY_MODE.steady
+    for (const [key, n] of Object.entries(nums)) {
+      n.field.closest('.num').hidden = !keys.includes(key)
+      n.sync()
+    }
 
     const status = $('scrollStatus')
     const arrow = live ? (st.dir < 0 ? '↑' : '↓') : ''
@@ -361,5 +410,25 @@
     } else {
       status.textContent = arrow
     }
+  }
+
+  // The window grows to fit the strip and shrinks back without it. Widths
+  // are summed from the controls rather than measured off the bar, since the
+  // bar always fills whatever window it's given.
+  let fitted = 0
+  function fitBar () {
+    let want = 0
+    if (barEl.classList.contains('strip')) {
+      const cs = getComputedStyle(barEl)
+      want = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+      let n = 0
+      const add = (el) => { if (el.hidden || el.offsetParent === null) return; want += el.getBoundingClientRect().width; n++ }
+      for (const el of barEl.children) {
+        if (el.id === 'strip') { for (const c of el.children) add(c) } else add(el)
+      }
+      want += parseFloat(cs.columnGap) * Math.max(0, n - 1)
+      want = Math.ceil(want) + 2
+    }
+    if (want !== fitted) { fitted = want; stage.setBarWidth(want) }   // 0 = back to the base width
   }
 </script>
