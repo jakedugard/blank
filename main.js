@@ -16,7 +16,7 @@ let barWidth = BAR.w   // grows to fit open wells, see 'bar:width'
 const FEATURES = { radius: true, scroll: true }
 
 // Auto-scroll defaults for targets that predate the setting.
-const SCROLL_DEFAULTS = { mode: 'steady', speed: 140, ease: 600, preroll: 1000, stride: 0.65, dwell: 200, variation: 0.3, lockSeed: false, seed: 0 }   // Medium and Skim
+const SCROLL_DEFAULTS = { mode: 'steady', speed: 140, ease: 600, preroll: 1000, stride: 0.65, dwell: 200, variation: 0.3, pace: 0.85, lockSeed: false, seed: 0 }   // Medium and Skim
 // Presets per mode: a word instead of numbers. Anything else is Custom.
 const SCROLL_PRESETS = {
   steady: [
@@ -25,9 +25,9 @@ const SCROLL_PRESETS = {
     { name: 'Fast', speed: 280, ease: 400 }
   ],
   natural: [
-    { name: 'Read', stride: 0.35, dwell: 600, variation: 0.35 },
-    { name: 'Skim', stride: 0.65, dwell: 200, variation: 0.3 },
-    { name: 'Sweep', stride: 1.1, dwell: 100, variation: 0.15 }
+    { name: 'Read', stride: 0.35, dwell: 600, variation: 0.35, pace: 1 },
+    { name: 'Skim', stride: 0.65, dwell: 200, variation: 0.3, pace: 0.85 },
+    { name: 'Sweep', stride: 1.1, dwell: 60, variation: 0.15, pace: 0.55 }
   ]
 }
 
@@ -487,6 +487,7 @@ function scrollSettings () {
     stride: num('stride'),
     dwell: num('dwell'),
     variation: num('variation'),
+    pace: num('pace'),
     lockSeed: !!s.lockSeed,
     seed: num('seed')
   }
@@ -517,6 +518,7 @@ function setScroll (patch) {
       stride: clamp(Number(n.stride) || SCROLL_DEFAULTS.stride, 0.1, 3),
       dwell: clamp(Math.round(n.dwell) || 0, 0, 30000),
       variation: clamp(Number(n.variation) || 0, 0, 1),
+      pace: clamp(Number(n.pace) || SCROLL_DEFAULTS.pace, 0.3, 2),
       lockSeed: !!n.lockSeed,
       seed: Math.round(n.seed) || 0
     }
@@ -587,6 +589,7 @@ function scrollSubmenu () {
   const sec = (v) => v ? `${v / 1000} s` : 'None'
   const pct = (v) => v ? `${Math.round(v * 100)}%` : 'None'
   const screens = (v) => v === 1 ? 'Full screen' : `${Math.round(v * 100)}% of screen`
+  const glide = (v) => ({ 0.55: 'Quick', 0.85: 'Brisk', 1: 'Easy', 1.4: 'Slow' }[v] || `${Math.round(v * 100)}%`)
 
   const preset = scrollPreset(s)
   const presets = SCROLL_PRESETS[s.mode].map(p => ({
@@ -598,6 +601,7 @@ function scrollSubmenu () {
     { label: `Stride: ${screens(s.stride)}`, submenu: pick([0.35, 0.5, 0.65, 0.85, 1.1], 'stride', screens) },
     { label: `Dwell: ${sec(s.dwell)}`, submenu: pick([100, 200, 400, 600, 1000], 'dwell', sec) },
     { label: `Variation: ${pct(s.variation)}`, submenu: pick([0, 0.15, 0.3, 0.5], 'variation', pct) },
+    { label: `Glide: ${glide(s.pace)}`, submenu: pick([0.55, 0.85, 1, 1.4], 'pace', glide) },
     { label: 'Same rhythm each take', type: 'checkbox', checked: s.lockSeed, click: () => setScroll({ lockSeed: !s.lockSeed }) }
   ] : [
     { label: `Speed: ${s.speed} px/s`, submenu: pick([60, 100, 140, 200, 300], 'speed', v => `${v} px/s`) },

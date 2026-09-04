@@ -155,7 +155,7 @@ function launch (m) {
     // steady
     k: 0, target: 0,
     // natural
-    stride: m.stride, dwell: m.dwell, variation: m.variation,
+    stride: m.stride, dwell: m.dwell, variation: m.variation, pace: m.pace || 1,
     rand: rng(m.seed || 1), flick: null
   }
   const me = job
@@ -181,7 +181,7 @@ function launch (m) {
 // natural picks up stride, dwell and variation on the next flick.
 function tune (m) {
   if (!job) return
-  for (const k of ['speed', 'ease', 'stride', 'dwell', 'variation']) {
+  for (const k of ['speed', 'ease', 'stride', 'dwell', 'variation', 'pace']) {
     if (Number.isFinite(m[k])) job[k] = m[k]
   }
 }
@@ -228,7 +228,8 @@ function nextFlick () {
   if (dist < 1) { j.pos = to; j.el.scrollTo({ top: to, behavior: 'instant' }); finish('done'); return }
   // Longer flicks take longer, and none is quick: a short one is a second,
   // 70% of a screen nearer two. Most of that is the tail.
-  const T = Math.min(2600, Math.max(1000, 800 + dist * 1.8)) * jitter(j)
+  // `pace` scales the whole flick: under 1 is a quicker hand.
+  const T = Math.min(2600, Math.max(1000, 800 + dist * 1.8)) * j.pace * jitter(j)
   j.flick = { from: j.pos, to, t0: performance.now(), T, curve: glide, last: to === max || to === 0 }
   j.raf = requestAnimationFrame(tickNatural)
 }

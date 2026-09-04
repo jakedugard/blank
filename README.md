@@ -81,9 +81,9 @@ under them the numbers, per page:
 - **Speed** in px/s and **Easing**, the ramp in ms, for Steady. Starting,
   stopping, pausing and arriving at the end of the page all use the same
   smoothstep velocity ramp, so every change of motion reads as one gesture.
-- **Stride** (a share of the screen), **Dwell** (the rest between flicks)
-  and **Variation** (jitter on all of it, so the rhythm isn't a metronome)
-  for Natural. The jitter is seeded: with **Same rhythm each take** on, a
+- **Stride** (a share of the screen), **Dwell** (the rest between flicks),
+  **Glide** (how quick the hand is) and **Variation** (jitter on all of it,
+  so the rhythm isn't a metronome) for Natural. The jitter is seeded: with **Same rhythm each take** on, a
   re-record of the same page moves exactly the same way.
 - **Pre-roll**, for both.
 
