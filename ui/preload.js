@@ -336,6 +336,7 @@ if (isOwnUI) {
     setScroll:  (p)    => ipcRenderer.invoke('stage:setScroll', p),
     scroll:     (dir)  => ipcRenderer.invoke('stage:scroll', dir),
     scrollStop: ()     => ipcRenderer.invoke('stage:scrollStop'),
+    scrollPreset: ()   => ipcRenderer.invoke('stage:scrollPreset'),
     setBarWidth: (w)   => ipcRenderer.send('bar:width', w),
     focusStage: ()     => ipcRenderer.invoke('stage:focusStage'),
 

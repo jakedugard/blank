@@ -16,7 +16,20 @@ let barWidth = BAR.w   // grows to fit the scroll strip, see 'bar:width'
 const FEATURES = { radius: true, scroll: true }
 
 // Auto-scroll defaults for targets that predate the setting.
-const SCROLL_DEFAULTS = { mode: 'steady', speed: 90, ease: 600, preroll: 2000, stride: 0.6, dwell: 1500, variation: 0.3, lockSeed: false, seed: 0 }
+const SCROLL_DEFAULTS = { mode: 'steady', speed: 90, ease: 600, preroll: 2000, stride: 0.7, dwell: 1200, variation: 0.3, lockSeed: false, seed: 0 }   // Medium and Skim
+// Presets per mode: a word instead of numbers. Anything else is Custom.
+const SCROLL_PRESETS = {
+  steady: [
+    { name: 'Slow', speed: 45, ease: 900 },
+    { name: 'Medium', speed: 90, ease: 600 },
+    { name: 'Fast', speed: 180, ease: 400 }
+  ],
+  natural: [
+    { name: 'Read', stride: 0.5, dwell: 2500, variation: 0.35 },
+    { name: 'Skim', stride: 0.7, dwell: 1200, variation: 0.3 },
+    { name: 'Sweep', stride: 0.9, dwell: 700, variation: 0.15 }
+  ]
+}
 
 let stage = null   // the window
 let view = null    // the page inside it, clipped to the corner radius
@@ -347,7 +360,7 @@ function pushState () {
     presets: PRESETS,
     radius: store.radius(),
     features: FEATURES,
-    scroll: scrollSettings(),
+    scroll: { ...scrollSettings(), preset: scrollPreset() },
     scrolling: scrollState,
     maxFit: { w: work.width, h: work.height },
     recents: store.all().slice(0, 8).map(r => ({ id: r.id, name: r.name }))
@@ -415,6 +428,27 @@ function scrollSettings () {
     lockSeed: !!s.lockSeed,
     seed: num('seed')
   }
+}
+
+// The preset whose numbers the settings match, or 'Custom'.
+function scrollPreset (s = scrollSettings()) {
+  const near = (a, b) => Math.abs(a - b) < 1e-6
+  const hit = SCROLL_PRESETS[s.mode].find(p => Object.keys(p).every(k => k === 'name' || near(p[k], s[k])))
+  return hit ? hit.name : 'Custom'
+}
+
+function applyScrollPreset (name) {
+  const s = scrollSettings()
+  const p = SCROLL_PRESETS[s.mode].find(p => p.name === name)
+  if (p) setScroll({ ...p })
+}
+
+// Click the word: the next preset along, and Custom wraps to the first.
+function cycleScrollPreset () {
+  const s = scrollSettings()
+  const list = SCROLL_PRESETS[s.mode]
+  const i = list.findIndex(p => p.name === scrollPreset(s))
+  applyScrollPreset(list[(i + 1) % list.length].name)
 }
 
 function setScroll (patch) {
@@ -500,6 +534,11 @@ function scrollSubmenu () {
   const pct = (v) => v ? `${Math.round(v * 100)}%` : 'None'
   const screens = (v) => v === 1 ? 'Full screen' : `${Math.round(v * 100)}% of screen`
 
+  const preset = scrollPreset(s)
+  const presets = SCROLL_PRESETS[s.mode].map(p => ({
+    label: p.name, type: 'radio', checked: preset === p.name, click: () => applyScrollPreset(p.name)
+  })).concat({ label: 'Custom', type: 'radio', checked: preset === 'Custom', enabled: preset === 'Custom' })
+
   // Only the settings the chosen mode reads. Pre-roll applies to both.
   const settings = natural ? [
     { label: `Stride: ${screens(s.stride)}`, submenu: pick([0.33, 0.5, 0.6, 0.8, 1], 'stride', screens) },
@@ -519,6 +558,8 @@ function scrollSubmenu () {
     { type: 'separator' },
     { label: 'Steady', type: 'radio', checked: !natural, click: () => setScroll({ mode: 'steady' }) },
     { label: 'Natural', type: 'radio', checked: natural, click: () => setScroll({ mode: 'natural' }) },
+    { type: 'separator' },
+    ...presets,
     { type: 'separator' },
     ...settings,
     { label: `Pre-roll: ${sec(s.preroll)}`, submenu: pick([0, 1000, 2000, 3000, 5000], 'preroll', sec) }
@@ -731,6 +772,7 @@ ipcMain.handle('stage:scrollMenu', popupScrollMenu)
 ipcMain.handle('stage:setScroll', (_e, patch) => setScroll(patch || {}))
 ipcMain.handle('stage:scroll', (_e, dir) => startScroll(dir < 0 ? -1 : 1))
 ipcMain.handle('stage:scrollStop', () => scrollCmd('stop'))
+ipcMain.handle('stage:scrollPreset', () => cycleScrollPreset())
 ipcMain.handle('stage:focusStage', () => stage && stage.isVisible() && stage.focus())
 
 // Manual drag: both windows move from a recorded origin plus the pointer delta,

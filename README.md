@@ -70,11 +70,14 @@ turns around. **Hold P** to pause and release to carry on. **Esc** stops, and
 so does touching the wheel or any scroll key — the moment you reach for the
 page it's yours again.
 
-The strip holds play, the mode, and that mode's two or three numbers, edited
-like the radius (type, ↑↓, or drag the unit to scrub) and picked up by the
-page live. The address condenses to the page's name to make room, and the
-bar widens to fit; click Scroll again, or the name, to fold it. Pre-roll,
-the locked rhythm and custom entry live one right-click away.
+The strip holds play, the mode, and a preset, each a word that clicks to the
+next. Steady has Slow, Medium and Fast; Natural has Read, Skim and Sweep.
+Right-click the strip to fine-tune: the numbers behind the preset, pre-roll,
+and the locked rhythm. Once the numbers match no preset the word reads
+Custom and they appear in the strip, edited like the radius (type, ↑↓, or
+drag the unit to scrub) and picked up by the page live. The address
+condenses to the page's name to make room, and the bar widens to fit; click
+Scroll again, or the name, to fold it.
 
 **Steady** is one velocity, for showreels and long pages.
 
@@ -88,8 +91,8 @@ the locked rhythm and custom entry live one right-click away.
 wheel or trackpad. Each flick glides out over about half a second.
 
 - **Stride** — how far each flick travels, as a share of the screen
-  (default 60%).
-- **Dwell** — the rest between flicks (default 1.5 s).
+  (default 70%, the Skim preset).
+- **Dwell** — the rest between flicks (default 1.2 s).
 - **Variation** — jitter on stride, dwell and glide, so the rhythm isn't a
   metronome (default 30%).
 - **Same rhythm each take** — the jitter is seeded, so with this on a

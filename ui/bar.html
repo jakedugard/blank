@@ -100,15 +100,17 @@
 
   <!-- The strip. Play scrolls down, ⌥-click up; while the page moves it's
        the stop, and the status beside it counts down the pre-roll, shows the
-       direction, or says paused. Numbers are edited like the radius: type,
-       ↑↓ to step, drag the unit to scrub. Which ones show depends on the
-       mode; changes reach the page live. Right-click for the full menu. -->
+       direction, or says paused. Then the mode and a preset, each a word
+       that clicks to the next. The numbers behind the preset show only when
+       they match no preset (Custom), edited like the radius: type, ↑↓ to
+       step, drag the unit to scrub. Right-click for all of it as a menu. -->
   <div class="strip-ctl" id="strip" hidden>
     <button class="btn play" id="play">
       <span class="sf go" aria-hidden="true">&#x100284;</span><span class="sf stop" aria-hidden="true">&#x1006F7;</span><span id="scrollStatus"></span>
     </button>
     <span class="rule"></span>
     <button class="btn mode" id="mode" title="Switch mode">Steady</button>
+    <button class="btn mode" id="preset" title="Next preset · right-click to fine-tune">Medium</button>
     <label class="btn num" data-key="speed" title="Speed · ↑↓ to step · drag unit to scrub">
       <input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">px/s</span>
     </label>
@@ -300,6 +302,7 @@
     back()
   }
   $('mode').onclick = () => stage.setScroll({ mode: scrollNow('mode') === 'natural' ? 'steady' : 'natural' })
+  $('preset').onclick = () => stage.scrollPreset()
   // Pre-roll, the locked rhythm and custom entry stay one right-click away.
   for (const el of [$('scrollToggle'), $('strip')]) {
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); stage.scrollMenu() })
@@ -397,7 +400,8 @@
     const mode = $('mode')
     mode.textContent = modeName
     mode.title = `Switch to ${sc.mode === 'natural' ? 'Steady' : 'Natural'}`
-    const keys = BY_MODE[sc.mode] || BY_MODE.steady
+    $('preset').textContent = sc.preset || 'Custom'
+    const keys = sc.preset === 'Custom' ? (BY_MODE[sc.mode] || BY_MODE.steady) : []
     for (const [key, n] of Object.entries(nums)) {
       n.field.closest('.num').hidden = !keys.includes(key)
       n.sync()
