@@ -52,8 +52,8 @@ const easeOut = (t) => 1 - (1 - t) ** 3
 // the tail: velocity keeps shrinking without ever braking hard, so the stop
 // is felt rather than seen. Integrated in closed form so a frame can ask for
 // the position at any t. Velocity is continuous at the handover.
-const GLIDE_IN = 0.22
-const DECAY = 4
+const GLIDE_IN = 0.3
+const DECAY = 5
 const glideHead = 2 * GLIDE_IN / Math.PI
 const glideTotal = glideHead + (1 - GLIDE_IN) / (DECAY + 1)
 function glide (t) {
@@ -226,9 +226,9 @@ function nextFlick () {
   if (j.dir > 0 ? max - to < 40 : to < 40) to = j.dir > 0 ? max : 0
   const dist = Math.abs(to - j.pos)
   if (dist < 1) { j.pos = to; j.el.scrollTo({ top: to, behavior: 'instant' }); finish('done'); return }
-  // Longer flicks take longer, and none is quick: a short one is a second,
-  // a full screen nearer two and a half. Most of that is the tail.
-  const T = Math.min(2800, Math.max(1000, 800 + dist * 2)) * jitter(j)
+  // Longer flicks take longer, and none is quick: a short one is over a second,
+  // 70% of a screen nearer two and a half. Most of that is the tail.
+  const T = Math.min(3200, Math.max(1200, 1000 + dist * 2.2)) * jitter(j)
   j.flick = { from: j.pos, to, t0: performance.now(), T, curve: glide, last: to === max || to === 0 }
   j.raf = requestAnimationFrame(tickNatural)
 }
