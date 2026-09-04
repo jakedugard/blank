@@ -7,7 +7,7 @@
     "start": "electron .",
     "pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --arm64",
     "install-app": "npm run pack && rm -rf /Applications/Blank.app && cp -R dist/mac-arm64/Blank.app /Applications/Blank.app",
-    "release": "GH_TOKEN=$(gh auth token) APPLE_KEYCHAIN_PROFILE=blank electron-builder --mac --universal --publish always"
+    "release": "APPLE_KEYCHAIN_PROFILE=blank electron-builder --mac --universal --publish never && V=$(node -p \"require('./package.json').version\") && gh release create v$V dist/Blank-$V-universal.dmg dist/Blank-$V-universal-mac.zip dist/Blank-$V-universal-mac.zip.blockmap dist/latest-mac.yml --title \"Blank $V\" --generate-notes"
   },
   "devDependencies": {
     "electron": "^44.1.1",
