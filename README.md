@@ -58,49 +58,34 @@ folder instead. Watching that folder gives live reload for free.
 
 ## Auto-scroll
 
-A capture that scrolls by hand always looks scrolled by hand. **Scroll** in
-the bar opens the strip; the strip's **play** button scrolls the page down at
-a set speed, and **⌥-click** scrolls up. While the page moves the button
-becomes the stop and the readout beside it counts down the pre-roll, shows
-the direction, or says paused. Click it again to stop.
+A capture that scrolls by hand always looks scrolled by hand. Hover
+**Scroll** in the bar and it offers two ways to go:
 
-From the keyboard, so your hands are off the mouse when the recording starts:
-**⌥↓** scrolls down, **⌥↑** up; the same key again stops, the opposite key
-turns around. **Hold P** to pause and release to carry on. **Esc** stops, and
-so does touching the wheel or any scroll key — the moment you reach for the
-page it's yours again.
+- **Steady** is one velocity, start to finish, for showreels and long pages.
+- **Natural** is a flick, a rest, a flick: the way a hand reads a page on a
+  wheel or trackpad. Each flick accelerates, glides out over about a second,
+  and the page rests before the next.
 
-The strip holds play, the mode, and a preset, each a word that clicks to the
-next. Steady has Slow, Medium and Fast; Natural has Read, Skim and Sweep.
-Right-click the strip to fine-tune: the numbers behind the preset, pre-roll,
-and the locked rhythm. Once the numbers match no preset the word reads
-Custom and they appear in the strip, edited like the radius (type, ↑↓, or
-drag the unit to scrub) and picked up by the page live. The address
-condenses to the page's name to make room, and the bar widens to fit; click
-Scroll again, or the name, to fold it.
+Click one and the page scrolls down after a two-second pre-roll, so you can
+take your hands off before the recording shows anything move; **⌥-click**
+scrolls up. While it runs the same spot is the readout — the countdown, then
+the mode and direction, or paused — and a click there stops. From the
+keyboard, **⌥↓** and **⌥↑** start (the same key again stops, the opposite
+turns around), **hold P** pauses, and **Esc** stops, as does touching the
+wheel or any scroll key: the moment you reach for the page it's yours.
 
-**Steady** is one velocity, for showreels and long pages.
+Both come tuned. To change them, right-click Scroll (or ••• → Auto-scroll):
+presets — Slow, Medium, Fast for Steady; Read, Skim, Sweep for Natural — and
+under them the numbers, per page:
 
-- **Speed** in px/s (default 90).
-- **Easing** — the ramp in ms (default 600). Starting, stopping, pausing and
-  arriving at the end of the page all use the same smoothstep velocity ramp,
-  so every change of motion reads as one gesture. The arrival ramp starts at
-  exactly the stopping distance, so the page settles on its last pixel.
-
-**Natural** is a flick, a rest, a flick: the way a hand reads a page on a
-wheel or trackpad. Each flick glides out over about half a second.
-
-- **Stride** — how far each flick travels, as a share of the screen
-  (default 70%, the Skim preset).
-- **Dwell** — the rest between flicks (default 1.2 s).
-- **Variation** — jitter on stride, dwell and glide, so the rhythm isn't a
-  metronome (default 30%).
-- **Same rhythm each take** — the jitter is seeded, so with this on a
+- **Speed** in px/s and **Easing**, the ramp in ms, for Steady. Starting,
+  stopping, pausing and arriving at the end of the page all use the same
+  smoothstep velocity ramp, so every change of motion reads as one gesture.
+- **Stride** (a share of the screen), **Dwell** (the rest between flicks)
+  and **Variation** (jitter on all of it, so the rhythm isn't a metronome)
+  for Natural. The jitter is seeded: with **Same rhythm each take** on, a
   re-record of the same page moves exactly the same way.
-
-Both modes share **Pre-roll** — a delay before motion starts (default 2 s),
-so you can hit the key and take your hands off before the recording shows
-anything move.
+- **Pre-roll**, for both.
 
 Both engines run in the preload's isolated world on `requestAnimationFrame`,
 so they're frame-accurate and pages can't see them. Pages that scroll a container
