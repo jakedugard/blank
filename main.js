@@ -109,7 +109,8 @@ function createStage () {
 // The stage arrives and leaves with a short fade and a few pixels of rise,
 // rather than cutting. One fade at a time per window; a new one takes over.
 
-const EASE_OUT = (t) => 1 - (1 - t) ** 3
+// Expo-out: fast off the mark, then a long settle.
+const EASE_OUT = (t) => t >= 1 ? 1 : 1 - 2 ** (-10 * t)
 const fading = new WeakMap()
 let settling = false   // the stage is mid-rise; the bar shouldn't follow it
 
@@ -136,7 +137,7 @@ function fadeWindow (win, { to, ms, rise = 0 }) {
 
 async function hideStage () {
   if (!stage || stage.isDestroyed() || !stage.isVisible()) return
-  await fadeWindow(stage, { to: 0, ms: 140 })
+  await fadeWindow(stage, { to: 0, ms: 220 })
   if (!stage.isDestroyed()) { stage.hide(); stage.setOpacity(1) }
 }
 
@@ -147,16 +148,17 @@ function showStage () {
   const anchor = bar && !bar.isDestroyed() ? bar.getBounds() : stage.getBounds()
   const work = screen.getDisplayMatching(anchor).workArea
   const [w, h] = stage.getSize()
-  const rise = 10
   const x = Math.round(work.x + (work.width - w) / 2)
   const y = Math.round(work.y + Math.max(0, (work.height - h - BAR.h - BAR.gap) / 2))
-  // The bar goes straight to where the stage will settle; only the page rises.
+  // The bar goes straight to where the stage will settle. The page starts
+  // down at the bar, behind it, and rises into place as it fades in.
   if (bar && !bar.isDestroyed()) bar.setBounds(barBoundsFor({ x, y, width: w, height: h }))
+  const rise = BAR.gap + BAR.h + 24
   stage.setPosition(x, y + rise, false)
   stage.setOpacity(0)
   stage.show()
   settling = true
-  fadeWindow(stage, { to: 1, ms: 260, rise }).then(() => { settling = false; positionBar() })
+  fadeWindow(stage, { to: 1, ms: 520, rise }).then(() => { settling = false; positionBar() })
 }
 
 function layoutView () {
