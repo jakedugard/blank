@@ -1,14 +1,14 @@
 # blank
 
-**A window with nothing in it but the page.**
+**A stripped-down browser for clean screen recordings.**
 
-Point blank at a site or a folder and it shows the page at an exact size,
-with no browser around it: no tabs, no address bar, no scrollbars. Rounded
-corners if you want them. Then you record it.
+No tabs, no address bar, no bookmarks bar, no scrollbars. Just the page, at
+the size you want, with nothing in the way. Point blank at a site or a folder
+and record.
 
 It's for designers and developers who show web work: a site you built, a
-prototype, a reel of a launch. A screen recording of a real browser always
-looks like a screen recording of a browser. This looks like the work.
+prototype, a reel of a launch. A recording of a real browser always looks
+like a recording of a browser. This looks like the work.
 
 **[Download for Mac](https://github.com/jakedugard/blank/releases/latest)** ·
 free, open source, updates itself.
