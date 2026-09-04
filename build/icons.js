@@ -59,15 +59,23 @@ const root = path.join(__dirname, '..')
 fs.writeFileSync(path.join(root, 'ui/tray/iconTemplate.png'), shape(18, 14, [0, 0, 0]))
 fs.writeFileSync(path.join(root, 'ui/tray/iconTemplate@2x.png'), shape(36, 28, [0, 0, 0]))
 
-// App icon: iconset → icns. Glyph fills 80% like a standard macOS tile.
+// App icon: iconset → icns. The master is build/icon.png, a 1024 render of
+// build/icon.svg on Apple's squircle (824 wide, 100 in, radius 185); render
+// it with any SVG rasteriser when the SVG changes. If it's missing, the
+// generated shape stands in.
 const set = path.join(__dirname, 'icon.iconset')
+const master = path.join(__dirname, 'icon.png')
 fs.rmSync(set, { recursive: true, force: true })
 fs.mkdirSync(set)
 for (const [name, px] of [
   ['icon_16x16', 16], ['icon_16x16@2x', 32], ['icon_32x32', 32], ['icon_32x32@2x', 64],
   ['icon_128x128', 128], ['icon_128x128@2x', 256], ['icon_256x256', 256], ['icon_256x256@2x', 512],
   ['icon_512x512', 512], ['icon_512x512@2x', 1024]
-]) fs.writeFileSync(path.join(set, name + '.png'), shape(px, Math.round(px * 0.8), INK))
+]) {
+  const out = path.join(set, name + '.png')
+  if (fs.existsSync(master)) execSync(`sips -z ${px} ${px} "${master}" --out "${out}" >/dev/null`)
+  else fs.writeFileSync(out, shape(px, Math.round(px * 0.8), INK))
+}
 execSync(`iconutil -c icns "${set}" -o "${path.join(__dirname, 'icon.icns')}"`)
 fs.rmSync(set, { recursive: true, force: true })
 console.log('icons written')
