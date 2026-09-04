@@ -47,20 +47,27 @@ const smooth = (k) => k * k * (3 - 2 * k)
 const easeOut = (t) => 1 - (1 - t) ** 3
 
 // A hand's flick, as a velocity profile: a sine ramp up over the first
-// GLIDE_IN of the stroke (the finger getting going), then a squared decay to
-// rest (the release). Integrated in closed form so a frame can ask for the
-// position at any t. Velocity is continuous at the handover.
-const GLIDE_IN = 0.25
-const glideTotal = 2 * GLIDE_IN / Math.PI + (1 - GLIDE_IN) / 3
+// GLIDE_IN of the stroke (the finger getting going), then a (1 − u)^DECAY
+// fall to rest (the release). The higher the power, the longer and softer
+// the tail: velocity keeps shrinking without ever braking hard, so the stop
+// is felt rather than seen. Integrated in closed form so a frame can ask for
+// the position at any t. Velocity is continuous at the handover.
+const GLIDE_IN = 0.22
+const DECAY = 4
+const glideHead = 2 * GLIDE_IN / Math.PI
+const glideTotal = glideHead + (1 - GLIDE_IN) / (DECAY + 1)
 function glide (t) {
   let d
-  if (t < GLIDE_IN) d = (2 * GLIDE_IN / Math.PI) * (1 - Math.cos(Math.PI * t / (2 * GLIDE_IN)))
+  if (t < GLIDE_IN) d = glideHead * (1 - Math.cos(Math.PI * t / (2 * GLIDE_IN)))
   else {
     const u = (t - GLIDE_IN) / (1 - GLIDE_IN)
-    d = 2 * GLIDE_IN / Math.PI + (1 - GLIDE_IN) * (1 - (1 - u) ** 3) / 3
+    d = glideHead + (1 - GLIDE_IN) * (1 - (1 - u) ** (DECAY + 1)) / (DECAY + 1)
   }
   return d / glideTotal
 }
+// The same tail on its own, for cutting a flick short.
+const tailOut = (t) => 1 - (1 - t) ** (DECAY + 1)
+
 // Distance covered while k ramps from 0 to `k` at 1/ease per ms, in px:
 // speed · ease · ∫smooth = speed · ease · (k³ − k⁴/2). At k = 1 that's half
 // the cruise distance, which is when the arrival ramp has to begin.
@@ -219,9 +226,9 @@ function nextFlick () {
   if (j.dir > 0 ? max - to < 40 : to < 40) to = j.dir > 0 ? max : 0
   const dist = Math.abs(to - j.pos)
   if (dist < 1) { j.pos = to; j.el.scrollTo({ top: to, behavior: 'instant' }); finish('done'); return }
-  // Longer flicks take longer, but none is quick: even a short one is most
-  // of a second, and a full screen is nearer two.
-  const T = Math.min(2000, Math.max(700, 500 + dist * 1.4)) * jitter(j)
+  // Longer flicks take longer, and none is quick: a short one is a second,
+  // a full screen nearer two and a half. Most of that is the tail.
+  const T = Math.min(2800, Math.max(1000, 800 + dist * 2)) * jitter(j)
   j.flick = { from: j.pos, to, t0: performance.now(), T, curve: glide, last: to === max || to === 0 }
   j.raf = requestAnimationFrame(tickNatural)
 }
@@ -247,7 +254,7 @@ function truncateFlick (j) {
   if (!f) return
   const remaining = f.to - j.pos
   const tail = Math.sign(remaining) * Math.min(Math.abs(remaining), Math.max(24, Math.abs(remaining) * 0.3))
-  j.flick = { from: j.pos, to: j.pos + tail, t0: performance.now(), T: 400, curve: easeOut, last: false }
+  j.flick = { from: j.pos, to: j.pos + tail, t0: performance.now(), T: 500, curve: tailOut, last: false }
 }
 
 // --- shared ---
