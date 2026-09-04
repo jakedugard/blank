@@ -7,7 +7,7 @@
     "start": "electron .",
     "pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --arm64",
     "install-app": "npm run pack && rm -rf /Applications/blank.app && cp -R dist/mac-arm64/blank.app /Applications/blank.app",
-    "release": "APPLE_KEYCHAIN_PROFILE=blank electron-builder --mac --universal --publish never && V=$(node -p \"require('./package.json').version\") && gh release create v$V dist/blank-$V-universal.dmg dist/blank-$V-universal-mac.zip dist/blank-$V-universal-mac.zip.blockmap dist/latest-mac.yml --title \"blank $V\" --generate-notes"
+    "release": "APPLE_KEYCHAIN_PROFILE=blank electron-builder --mac --universal --publish never && V=$(node -p \"require('./package.json').version\") && gh release create v$V dist/blank.dmg dist/blank-$V-universal-mac.zip dist/blank-$V-universal-mac.zip.blockmap dist/latest-mac.yml --title \"blank $V\" --notes-file build/release-notes.md --generate-notes"
   },
   "devDependencies": {
     "electron": "^44.1.1",
@@ -58,7 +58,8 @@
           "type": "link",
           "path": "/Applications"
         }
-      ]
+      ],
+      "artifactName": "blank.dmg"
     },
     "publish": {
       "provider": "github",

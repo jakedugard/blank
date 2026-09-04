@@ -10,7 +10,7 @@ It's for designers and developers who show web work: a site you built, a
 prototype, a reel of a launch. A recording of a real browser always looks
 like a recording of a browser. This looks like the work.
 
-**[Download for Mac](https://github.com/jakedugard/blank/releases/latest)** ·
+**[Download for Mac](https://github.com/jakedugard/blank/releases/latest/download/blank.dmg)** ·
 free, open source, updates itself.
 
 ## What it does
@@ -106,11 +106,12 @@ are just numbers you'd rather nudge. `--radius=N` sets it from the command line.
 
 ## Releasing and updates
 
-Bump `version` in package.json, commit, then `npm run release`. That builds a
-universal binary, signs it with the Developer ID certificate in the keychain,
+Bump `version` in package.json, write the release's **What's new** into
+`build/release-notes.md` (the download line above it is fixed), commit, then
+`npm run release`. That builds a universal binary, signs it with the Developer ID certificate in the keychain,
 notarizes it through the `blank` notarytool profile (`xcrun notarytool
-store-credentials blank …` once per machine), and publishes the dmg, zip and
-update manifest to a GitHub release under `v<version>`.
+store-credentials blank …` once per machine), and publishes the dmg (always `blank.dmg`, so the download link never
+changes), zip and update manifest to a GitHub release under `v<version>`.
 
 Installed copies check that feed on launch and every four hours, download the
 new build quietly, and offer **Update to x.y.z** in the menu bar menu and •••.
