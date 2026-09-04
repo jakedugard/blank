@@ -71,7 +71,7 @@ so does touching the wheel or any scroll key — the moment you reach for the
 page it's yours again.
 
 Three settings, per target. Speed sits next to the button as a number — type
-it, drag the gauge to scrub, ↑↓ to step. Easing and pre-roll are presets a
+it, ↑↓ to step, drag the unit to scrub. Easing and pre-roll are presets a
 right-click away (or under ••• → Auto-scroll):
 
 - **Speed** in px/s (default 90).
