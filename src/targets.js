@@ -69,7 +69,7 @@ class TargetStore {
         localPath: null,
         liveUrl: null,
         size: size || { w: 1440, h: 900 },
-        scroll: { mode: 'steady', speed: 90, ease: 600, preroll: 1000, stride: 0.7, dwell: 250, variation: 0.3 },
+        scroll: { mode: 'steady', speed: 140, ease: 600, preroll: 1000, stride: 0.65, dwell: 200, variation: 0.3 },
         source: localPath ? 'local' : 'live',
         openedAt: Date.now()
       }

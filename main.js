@@ -16,18 +16,18 @@ let barWidth = BAR.w   // grows to fit open wells, see 'bar:width'
 const FEATURES = { radius: true, scroll: true }
 
 // Auto-scroll defaults for targets that predate the setting.
-const SCROLL_DEFAULTS = { mode: 'steady', speed: 90, ease: 600, preroll: 1000, stride: 0.7, dwell: 250, variation: 0.3, lockSeed: false, seed: 0 }   // Medium and Skim
+const SCROLL_DEFAULTS = { mode: 'steady', speed: 140, ease: 600, preroll: 1000, stride: 0.65, dwell: 200, variation: 0.3, lockSeed: false, seed: 0 }   // Medium and Skim
 // Presets per mode: a word instead of numbers. Anything else is Custom.
 const SCROLL_PRESETS = {
   steady: [
-    { name: 'Slow', speed: 45, ease: 900 },
-    { name: 'Medium', speed: 90, ease: 600 },
-    { name: 'Fast', speed: 180, ease: 400 }
+    { name: 'Slow', speed: 70, ease: 900 },
+    { name: 'Medium', speed: 140, ease: 600 },
+    { name: 'Fast', speed: 280, ease: 400 }
   ],
   natural: [
-    { name: 'Read', stride: 0.5, dwell: 750, variation: 0.35 },
-    { name: 'Skim', stride: 0.7, dwell: 250, variation: 0.3 },
-    { name: 'Sweep', stride: 0.9, dwell: 120, variation: 0.15 }
+    { name: 'Read', stride: 0.35, dwell: 600, variation: 0.35 },
+    { name: 'Skim', stride: 0.65, dwell: 200, variation: 0.3 },
+    { name: 'Sweep', stride: 1.1, dwell: 100, variation: 0.15 }
   ]
 }
 
@@ -595,12 +595,12 @@ function scrollSubmenu () {
 
   // Only the settings the chosen mode reads. Pre-roll applies to both.
   const settings = natural ? [
-    { label: `Stride: ${screens(s.stride)}`, submenu: pick([0.33, 0.5, 0.6, 0.8, 1], 'stride', screens) },
-    { label: `Dwell: ${sec(s.dwell)}`, submenu: pick([120, 250, 500, 750, 1500], 'dwell', sec) },
+    { label: `Stride: ${screens(s.stride)}`, submenu: pick([0.35, 0.5, 0.65, 0.85, 1.1], 'stride', screens) },
+    { label: `Dwell: ${sec(s.dwell)}`, submenu: pick([100, 200, 400, 600, 1000], 'dwell', sec) },
     { label: `Variation: ${pct(s.variation)}`, submenu: pick([0, 0.15, 0.3, 0.5], 'variation', pct) },
     { label: 'Same rhythm each take', type: 'checkbox', checked: s.lockSeed, click: () => setScroll({ lockSeed: !s.lockSeed }) }
   ] : [
-    { label: `Speed: ${s.speed} px/s`, submenu: pick([30, 60, 90, 150, 300], 'speed', v => `${v} px/s`) },
+    { label: `Speed: ${s.speed} px/s`, submenu: pick([60, 100, 140, 200, 300], 'speed', v => `${v} px/s`) },
     { label: `Easing: ${ms(s.ease)}`, submenu: pick([0, 300, 600, 1200, 2000], 'ease', ms) }
   ]
 
