@@ -35,6 +35,14 @@ class TargetStore {
     return this.data.barInCaptures
   }
 
+  // Where the bar was last parked, so the rig comes back on the same display.
+  barPos () { return this.data.barPos || null }
+  setBarPos (pos) {
+    if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) return
+    this.data.barPos = { x: Math.round(pos.x), y: Math.round(pos.y) }
+    this.save()
+  }
+
   // Corner radius is a house style rather than a per-project fact, so it's
   // stored once and applied to everything.
   radius () { return this.data.radius || 0 }

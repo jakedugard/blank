@@ -221,9 +221,18 @@ function positionBar () {
   bar.setBounds(barBoundsFor(stage.getBounds()))
 }
 
-// With no stage, the bar sits in the middle of the display you're on.
+// With no stage, the bar goes back to where it was last parked, or failing
+// that (first run, display gone) to the middle of the display you're on.
 function centerBar () {
   if (!bar || bar.isDestroyed()) return
+  const last = store.barPos()
+  if (last) {
+    const d = screen.getAllDisplays().find(d => {
+      const b = d.workArea
+      return last.x >= b.x && last.x + barWidth <= b.x + b.width && last.y >= b.y && last.y + BAR.h <= b.y + b.height
+    })
+    if (d) { bar.setBounds({ x: last.x, y: last.y, width: barWidth, height: BAR.h }); return }
+  }
   const work = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
   bar.setBounds({
     x: Math.round(work.x + (work.width - barWidth) / 2),
@@ -807,8 +816,13 @@ ipcMain.on('drag:end', () => {
   dragging = false
   dragOrigin = null
   positionBar()   // re-snap in case the rig crossed a display edge
+  rememberBar()
   pushState()
 })
+
+function rememberBar () {
+  if (bar && !bar.isDestroyed() && store) store.setBarPos(bar.getBounds())
+}
 
 // --- lifecycle --------------------------------------------------------------
 
@@ -855,4 +869,4 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => { /* the tray keeps us alive */ })
-app.on('before-quit', teardownSource)
+app.on('before-quit', () => { rememberBar(); teardownSource() })
