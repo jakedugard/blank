@@ -129,7 +129,7 @@ function fadeWindow (win, { to, ms, rise = 0 }) {
       if (rise) win.setPosition(x, Math.round(y - rise * k), false)
       if (k >= 1) { clearInterval(timer); fading.delete(win); resolve() }
     }
-    const timer = setInterval(step, 1000 / 60)
+    const timer = setInterval(step, 1000 / 120)
     fading.set(win, timer)
     step()
   })
@@ -148,7 +148,7 @@ function glideWindow (win, { x, y, ms }) {
       win.setPosition(Math.round(x0 + (x - x0) * k), Math.round(y0 + (y - y0) * k), false)
       if (k >= 1) { clearInterval(timer); fading.delete(win); resolve() }
     }
-    const timer = setInterval(step, 1000 / 60)
+    const timer = setInterval(step, 1000 / 120)
     fading.set(win, timer)
     step()
   })
@@ -160,17 +160,21 @@ async function hideStage () {
   if (!stage.isDestroyed()) { stage.hide(); stage.setOpacity(1) }
 }
 
-// Bring the stage up centred on whichever display the bar is on, so opening
-// a target from a bar you've parked somewhere puts the page next to it.
+// Bring the stage up attached to the bar: centred on it, sitting just above
+// it, wherever the bar is parked. The bar is the anchor and doesn't move
+// unless the page wouldn't fit above it, in which case it glides to where
+// the page has to be.
 function showStage () {
   if (!stage || stage.isDestroyed() || stage.isVisible()) return
   const anchor = bar && !bar.isDestroyed() ? bar.getBounds() : stage.getBounds()
   const work = screen.getDisplayMatching(anchor).workArea
   const [w, h] = stage.getSize()
-  const x = Math.round(work.x + (work.width - w) / 2)
-  const y = Math.round(work.y + Math.max(0, (work.height - h - BAR.h - BAR.gap) / 2))
-  // The page starts down at the bar, behind it, and rises into place as it
-  // fades in; the bar glides to where the page will settle on the same curve.
+  let x = Math.round(anchor.x + (anchor.width - w) / 2)
+  x = Math.max(work.x, Math.min(x, work.x + work.width - w))
+  let y = anchor.y - BAR.gap - h
+  y = Math.max(work.y, Math.min(y, work.y + work.height - h))
+
+  // The page starts down at the bar, behind it, and rises out of it.
   const ms = 520
   const rise = BAR.gap + BAR.h + 24
   stage.setPosition(x, y + rise, false)
@@ -179,8 +183,9 @@ function showStage () {
   settling = true
   if (bar && !bar.isDestroyed()) {
     const fb = barBoundsFor({ x, y, width: w, height: h })
-    if (bar.getBounds().width !== fb.width) bar.setSize(fb.width, fb.height, false)
-    glideWindow(bar, { x: fb.x, y: fb.y, ms })
+    const b = bar.getBounds()
+    if (b.width !== fb.width) bar.setSize(fb.width, fb.height, false)
+    if (b.x !== fb.x || b.y !== fb.y) glideWindow(bar, { x: fb.x, y: fb.y, ms })
   }
   fadeWindow(stage, { to: 1, ms, rise }).then(() => { settling = false; positionBar() })
 }
