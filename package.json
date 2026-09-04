@@ -1,16 +1,69 @@
 {
   "name": "blank",
-  "version": "0.0.1",
+  "version": "0.2.0",
   "description": "A blank window for capturing web work",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-packager . Blank --platform=darwin --arch=arm64 --out=dist --overwrite --icon=build/icon.icns --ignore='^/dist' --ignore='^/fixture' --ignore='^/\\.git' --ignore='^/build'",
-    "install-app": "npm run build && rm -rf /Applications/Blank.app && cp -R dist/Blank-darwin-arm64/Blank.app /Applications/Blank.app"
+    "pack": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dir --arm64",
+    "install-app": "npm run pack && rm -rf /Applications/Blank.app && cp -R dist/mac-arm64/Blank.app /Applications/Blank.app",
+    "release": "APPLE_KEYCHAIN_PROFILE=blank electron-builder --mac --universal --publish never"
   },
   "devDependencies": {
-    "@electron/packager": "^20.3.0",
-    "electron": "^44.1.1"
+    "electron": "^44.1.1",
+    "electron-builder": "^26.15.3"
   },
-  "productName": "Blank"
+  "productName": "Blank",
+  "author": "Jake Dugard",
+  "build": {
+    "appId": "com.jakedugard.blank",
+    "productName": "Blank",
+    "copyright": "Jake Dugard",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "src/**",
+      "ui/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "gatekeeperAssess": false,
+      "notarize": true,
+      "extendInfo": {
+        "LSUIElement": true
+      }
+    },
+    "dmg": {
+      "title": "Blank",
+      "contents": [
+        {
+          "x": 130,
+          "y": 150
+        },
+        {
+          "x": 390,
+          "y": 150,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "jakedugard",
+      "repo": "blank"
+    }
+  }
 }
