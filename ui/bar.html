@@ -71,14 +71,19 @@
 
   /* Scroll. One word at rest. Hover it and it becomes the two ways to go,
      Steady and Natural; click one and the page moves. While it moves the
-     same spot is the readout, lit, and a click there stops. */
-  .scroll { display:flex; align-items:center; flex:none; }
-  .scroll[hidden] { display:none; }    /* display:flex would otherwise win, as with .btn */
-  .scroll .choices { display:none; }
-  .scroll:hover:not(.live) .word { display:none; }
-  .scroll:hover:not(.live) .choices { display:flex; }
+     same spot is the readout, lit, and a click there stops.
+     The word and the pair share one grid cell, so the box is always as wide
+     as the pair and the word sits centred in it: on hover nothing shifts,
+     and the pointer lands in the gap between the two, on neither. */
+  .scroll { display:grid; align-items:center; flex:none; }
+  .scroll[hidden] { display:none; }    /* display:grid would otherwise win, as with .btn */
+  .scroll > * { grid-area:1 / 1; }
+  .scroll .word { justify-self:center; }
+  .scroll .choices { display:flex; gap:10px; visibility:hidden; }
+  .scroll:hover:not(.live) .word { visibility:hidden; }
+  .scroll:hover:not(.live) .choices { visibility:visible; }
   .scroll.live .word, .scroll.live .choices { display:none; }
-  .scroll .readout { display:none; }
+  .scroll .readout { display:none; justify-self:center; }
   .scroll.live .readout { display:flex; color:var(--accent); }
   .scroll .readout:hover { color:var(--ink); }
 </style>
