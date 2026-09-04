@@ -87,8 +87,8 @@ function createStage () {
 
   // There is no start screen. The stage only exists while a target is loaded;
   // with nothing open, the bar is the whole app.
-  stage.on('move', () => { if (!dragging && !settling && stage.isVisible()) positionBar() })
-  stage.on('resize', () => { layoutView(); if (!dragging && !settling && stage.isVisible()) positionBar() })
+  stage.on('move', () => { if (!dragging && stage.isVisible()) positionBar() })
+  stage.on('resize', () => { layoutView(); if (!dragging && stage.isVisible()) positionBar() })
   stage.on('closed', () => {
     stage = null
     view = null
@@ -106,46 +106,23 @@ function createStage () {
 }
 
 // --- fades ------------------------------------------------------------------
-// The stage arrives and leaves with a short fade and a few pixels of rise,
-// rather than cutting. One fade at a time per window; a new one takes over.
+// The stage leaves with a short fade rather than cutting (arriving is the
+// page's own job, see showStage). One fade at a time per window.
 
 // Expo-out: fast off the mark, then a long settle.
 const EASE_OUT = (t) => t >= 1 ? 1 : 1 - 2 ** (-10 * t)
 const fading = new WeakMap()
-let settling = false   // the stage is mid-rise; the bar shouldn't follow it
 
-function fadeWindow (win, { to, ms, rise = 0 }) {
+function fadeWindow (win, { to, ms }) {
   return new Promise((resolve) => {
     if (!win || win.isDestroyed()) return resolve()
     clearInterval(fading.get(win))
     const from = win.getOpacity()
-    const [x, y0] = win.getPosition()
-    const y = y0 + rise                      // rise > 0: we start lower and settle at y0
     const t0 = Date.now()
     const step = () => {
       if (win.isDestroyed()) { clearInterval(timer); return resolve() }
       const k = EASE_OUT(Math.min(1, (Date.now() - t0) / ms))
       win.setOpacity(from + (to - from) * k)
-      if (rise) win.setPosition(x, Math.round(y - rise * k), false)
-      if (k >= 1) { clearInterval(timer); fading.delete(win); resolve() }
-    }
-    const timer = setInterval(step, 1000 / 120)
-    fading.set(win, timer)
-    step()
-  })
-}
-
-// Slide a window to a spot on the same curve, for the bar following the stage.
-function glideWindow (win, { x, y, ms }) {
-  return new Promise((resolve) => {
-    if (!win || win.isDestroyed()) return resolve()
-    clearInterval(fading.get(win))
-    const [x0, y0] = win.getPosition()
-    const t0 = Date.now()
-    const step = () => {
-      if (win.isDestroyed()) { clearInterval(timer); return resolve() }
-      const k = EASE_OUT(Math.min(1, (Date.now() - t0) / ms))
-      win.setPosition(Math.round(x0 + (x - x0) * k), Math.round(y0 + (y - y0) * k), false)
       if (k >= 1) { clearInterval(timer); fading.delete(win); resolve() }
     }
     const timer = setInterval(step, 1000 / 120)
@@ -162,9 +139,22 @@ async function hideStage () {
 
 // Bring the stage up attached to the bar: centred on it, sitting just above
 // it, wherever the bar is parked. The bar is the anchor and doesn't move
-// unless the page wouldn't fit above it, in which case it glides to where
-// the page has to be.
-function showStage () {
+// unless the page wouldn't fit above it.
+//
+// The window itself doesn't animate. Moving a native window from a timer
+// always stutters at the end, so the window appears already in place and
+// the page rises into its frame on the compositor: a fade and a lift on
+// the document root, run by CSS at the display's own rate.
+const ARRIVE_MS = 560
+const ARRIVE_CSS = `
+  @keyframes blank-arrive {
+    from { opacity: 0; transform: translateY(${BAR.gap + BAR.h + 24}px); }
+    to   { opacity: 1; transform: none; }
+  }
+  html { animation: blank-arrive ${ARRIVE_MS}ms cubic-bezier(.16, 1, .3, 1) both !important; }
+`
+
+async function showStage () {
   if (!stage || stage.isDestroyed() || stage.isVisible()) return
   const anchor = bar && !bar.isDestroyed() ? bar.getBounds() : stage.getBounds()
   const work = screen.getDisplayMatching(anchor).workArea
@@ -173,21 +163,14 @@ function showStage () {
   x = Math.max(work.x, Math.min(x, work.x + work.width - w))
   let y = anchor.y - BAR.gap - h
   y = Math.max(work.y, Math.min(y, work.y + work.height - h))
+  stage.setPosition(x, y, false)
+  if (bar && !bar.isDestroyed()) bar.setBounds(barBoundsFor({ x, y, width: w, height: h }))
 
-  // The page starts down at the bar, behind it, and rises out of it.
-  const ms = 520
-  const rise = BAR.gap + BAR.h + 24
-  stage.setPosition(x, y + rise, false)
-  stage.setOpacity(0)
+  const wc = view && view.webContents
+  let key = null
+  if (wc && !wc.isDestroyed()) key = await wc.insertCSS(ARRIVE_CSS).catch(() => null)
   stage.show()
-  settling = true
-  if (bar && !bar.isDestroyed()) {
-    const fb = barBoundsFor({ x, y, width: w, height: h })
-    const b = bar.getBounds()
-    if (b.width !== fb.width) bar.setSize(fb.width, fb.height, false)
-    if (b.x !== fb.x || b.y !== fb.y) glideWindow(bar, { x: fb.x, y: fb.y, ms })
-  }
-  fadeWindow(stage, { to: 1, ms, rise }).then(() => { settling = false; positionBar() })
+  if (key) setTimeout(() => { if (!wc.isDestroyed()) wc.removeInsertedCSS(key).catch(() => {}) }, ARRIVE_MS + 100)
 }
 
 function layoutView () {
@@ -773,12 +756,8 @@ function rigVisible () {
 function showRig () {
   if (!bar || bar.isDestroyed()) return
   if (current.target && stage && !stage.isDestroyed()) {
-    if (!stage.isVisible()) {
-      stage.setOpacity(0)
-      stage.show()
-      fadeWindow(stage, { to: 1, ms: 200 })
-    }
-    positionBar()
+    if (!stage.isVisible()) showStage()
+    else positionBar()
   } else {
     centerBar()
   }
