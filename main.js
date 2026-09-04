@@ -10,6 +10,7 @@ const { TargetStore } = require('./src/targets')
 // The window is larger than the visual bar so the CSS shadow has room to fall.
 // INSET is that transparent margin; gap is measured from the visible edge.
 const BAR = { w: 560, h: 46, gap: 14 }
+let barWidth = BAR.w   // grows to fit open wells, see 'bar:width'
 
 // Feature gates. Everything stays wired; these only control what shows.
 const FEATURES = { radius: true, scroll: true }
@@ -204,14 +205,14 @@ function barCaptureItem () {
 function barBoundsFor (s) {
   const work = screen.getDisplayMatching(s).workArea
 
-  let x = Math.round(s.x + (s.width - BAR.w) / 2)
-  x = Math.max(work.x + 8, Math.min(x, work.x + work.width - BAR.w - 8))
+  let x = Math.round(s.x + (s.width - barWidth) / 2)
+  x = Math.max(work.x + 8, Math.min(x, work.x + work.width - barWidth - 8))
 
   let y = s.y + s.height + BAR.gap
   if (y + BAR.h > work.y + work.height) y = s.y - BAR.h - BAR.gap
   y = Math.max(work.y + 8, Math.min(y, work.y + work.height - BAR.h - 8))
 
-  return { x, y: Math.round(y), width: BAR.w, height: BAR.h }
+  return { x, y: Math.round(y), width: barWidth, height: BAR.h }
 }
 
 function positionBar () {
@@ -225,9 +226,9 @@ function centerBar () {
   if (!bar || bar.isDestroyed()) return
   const work = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
   bar.setBounds({
-    x: Math.round(work.x + (work.width - BAR.w) / 2),
+    x: Math.round(work.x + (work.width - barWidth) / 2),
     y: Math.round(work.y + (work.height - BAR.h) / 2),
-    width: BAR.w, height: BAR.h
+    width: barWidth, height: BAR.h
   })
 }
 
@@ -770,6 +771,18 @@ ipcMain.handle('stage:focusStage', () => stage && stage.isVisible() && stage.foc
 
 // Manual drag: both windows move from a recorded origin plus the pointer delta,
 // so there's no accumulated drift and no tether fighting the gesture.
+// The bar asks for the width its controls need; anything under the base
+// width means the base. It stays centred under the stage, or on its own
+// centre when there's none.
+ipcMain.on('bar:width', (_e, w) => {
+  const next = Math.max(BAR.w, Math.round(w) || 0)
+  if (next === barWidth || !bar || bar.isDestroyed()) return
+  const b = bar.getBounds()
+  barWidth = next
+  if (stage && !stage.isDestroyed() && stage.isVisible()) positionBar()
+  else bar.setBounds({ x: Math.round(b.x + (b.width - next) / 2), y: b.y, width: next, height: BAR.h })
+})
+
 ipcMain.on('drag:start', () => {
   if (!stage || stage.isDestroyed() || !bar || bar.isDestroyed()) return
   dragging = true

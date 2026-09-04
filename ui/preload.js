@@ -345,6 +345,7 @@ if (isOwnUI) {
     scrollStop: ()     => ipcRenderer.invoke('stage:scrollStop'),
     scrollAs:   (m, d) => ipcRenderer.invoke('stage:scrollAs', m, d),
     scrollPreset: (n)  => ipcRenderer.invoke('stage:scrollPreset', n),
+    setBarWidth: (w)   => ipcRenderer.send('bar:width', w),
     focusStage: ()     => ipcRenderer.invoke('stage:focusStage'),
 
     // Electron 32 removed File.path; this is the supported replacement.

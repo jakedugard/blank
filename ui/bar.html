@@ -342,6 +342,26 @@
         ? `Exceeds this display (${s.maxFit.w} × ${s.maxFit.h}) — a screen recording will clip it`
         : 'Change size'
     }
+
+    fitBar()
+  }
+
+  // The window grows to fit whatever is open and shrinks back when it
+  // folds. Widths are summed from the controls, with room kept for the
+  // address, since the bar itself always fills the window it's given.
+  const FIELD_MIN = 220
+  let fitted = 0
+  function fitBar () {
+    const cs = getComputedStyle(barEl)
+    let want = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + FIELD_MIN
+    let n = 1
+    for (const el of barEl.children) {
+      if (el.classList.contains('field') || el.offsetParent === null) continue
+      want += el.getBoundingClientRect().width
+      n++
+    }
+    want = Math.ceil(want + parseFloat(cs.columnGap) * (n - 1)) + 2
+    if (want !== fitted) { fitted = want; stage.setBarWidth(want) }
   }
 
   // The selected mode is the filled pill; the well shows play, and the
