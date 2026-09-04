@@ -687,6 +687,7 @@ ipcMain.handle('stage:moreMenu', popupMoreMenu)
 ipcMain.handle('stage:scrollMenu', popupScrollMenu)
 ipcMain.handle('stage:setScroll', (_e, patch) => setScroll(patch || {}))
 ipcMain.handle('stage:scroll', (_e, dir) => startScroll(dir < 0 ? -1 : 1))
+ipcMain.handle('stage:scrollStop', () => scrollCmd('stop'))
 ipcMain.handle('stage:focusStage', () => stage && stage.isVisible() && stage.focus())
 
 // Manual drag: both windows move from a recorded origin plus the pointer delta,

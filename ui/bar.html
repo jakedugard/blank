@@ -67,6 +67,15 @@
   .num .unit { color:inherit; opacity:.7; margin-left:-2px; }
   #speedIn { width:3.2ch; }
   #scrollStatus:empty { display:none; }
+
+  /* The transport: one button that starts the scroll, then becomes the stop
+     and the readout while the page moves. */
+  .btn.play { padding:5px 7px; gap:6px; }
+  .btn.play svg { flex:none; }
+  .btn.play .stop, .btn.play.live .go { display:none; }
+  .btn.play.live .stop { display:block; }
+  /* Speed is a setting, so it sits after the transport and reads quieter. */
+  #scroll { margin-left:-6px; }
 </style>
 
 <div class="bar" id="bar">
@@ -75,13 +84,24 @@
            placeholder="Drop a file or folder, or paste a URL">
   </div>
 
-  <!-- Auto-scroll speed, edited like the radius: type, scrub the icon, ↑↓.
-       The same control doubles as the readout while the page is moving. -->
-  <label class="btn num" id="scroll" hidden
-         title="Auto-scroll speed · ⌥↓ down · ⌥↑ up · hold P to pause · esc stops">
+  <!-- Auto-scroll transport. Click scrolls down, ⌥-click up; while the page
+       moves it's the stop, and the status beside it counts down the pre-roll,
+       shows the direction, or says paused. Right-click for the full menu. -->
+  <button class="btn play" id="play" hidden
+          title="Scroll down · ⌥-click scrolls up · ⌥↓ ⌥↑ · hold P to pause · esc stops · right-click for settings">
+    <svg class="go" width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
+      <path d="M1.5 2 L9.5 2 L5.5 9.5 Z" fill="currentColor"/>
+    </svg>
+    <svg class="stop" width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
+      <rect x="1.5" y="1.5" width="8" height="8" rx="1.5" fill="currentColor"/>
+    </svg><span id="scrollStatus"></span>
+  </button>
+  <!-- Auto-scroll speed, edited like the radius: type, scrub the icon, ↑↓. -->
+  <label class="btn num" id="scroll" hidden title="Scroll speed · drag icon to scrub · ↑↓ to step">
     <svg id="speedGrip" width="11" height="11" viewBox="0 0 11 11" aria-hidden="true">
-      <path d="M5.5 0.5 V10 M1.5 6.5 L5.5 10.5 L9.5 6.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
-    </svg><input id="speedIn" inputmode="numeric" spellcheck="false" autocomplete="off" value="90"><span class="unit">px/s</span><span id="scrollStatus"></span>
+      <path d="M1 8.5 A4.5 4.5 0 0 1 10 8.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M5.5 8.5 L8.2 4.6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    </svg><input id="speedIn" inputmode="numeric" spellcheck="false" autocomplete="off" value="90"><span class="unit">px/s</span>
   </label>
   <button class="btn" id="size">— × —</button>
   <!-- Corner radius is a number, so it's edited as one: click to type,
@@ -209,6 +229,18 @@
     grip.addEventListener('pointerup', up)
     grip.addEventListener('pointercancel', up)
   })
+  // --- auto-scroll transport -------------------------------------------------
+  const play = $('play')
+  play.onclick = (e) => {
+    const live = !!(state && state.scrolling && state.scrolling.active)
+    if (live) stage.scrollStop()
+    else stage.scroll(e.altKey ? -1 : 1)
+    back()
+  }
+  // Easing, pre-roll and the up/down commands live one right-click away.
+  for (const el of [play, $('scroll')]) {
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); stage.scrollMenu() })
+  }
   $('size').onclick = () => stage.sizeMenu()
 
   // --- corner radius: an inline number ---------------------------------------
@@ -293,35 +325,35 @@
     }
   }
 
-  // While the page moves, the speed control doubles as the readout: the
-  // arrow flips for direction, and a status counts down the pre-roll or
-  // says paused.
+  // While the page moves, the transport becomes the stop and the readout:
+  // a status counts down the pre-roll, shows the direction, or says paused.
   let countdown = null
   function renderScroll (s) {
-    const b = $('scroll')
     const st = s.scrolling
     const sc = s.scroll
     clearInterval(countdown)
-    b.hidden = !s.features.scroll || !s.target || !sc
-    if (b.hidden) return
+    const hidden = !s.features.scroll || !s.target || !sc
+    play.hidden = hidden
+    $('scroll').hidden = hidden
+    if (hidden) return
 
     const live = !!(st && st.active)
-    b.classList.toggle('live', live)
-    $('speedGrip').style.transform = st && st.dir < 0 ? 'rotate(180deg)' : ''
+    play.classList.toggle('live', live)
     if (document.activeElement !== speedIn) speedIn.value = sc.speed
 
     const status = $('scrollStatus')
+    const arrow = live ? (st.dir < 0 ? '↑' : '↓') : ''
     if (live && st.phase === 'preroll') {
       const tickDown = () => {
         const left = Math.max(0, st.until - Date.now())
-        status.textContent = `in ${(left / 1000).toFixed(1)} s`
+        status.textContent = `${arrow} in ${(left / 1000).toFixed(1)} s`
       }
       tickDown()
       countdown = setInterval(tickDown, 100)
     } else if (live && st.phase === 'paused') {
-      status.textContent = 'paused'
+      status.textContent = `${arrow} paused`
     } else {
-      status.textContent = ''
+      status.textContent = arrow
     }
   }
 </script>

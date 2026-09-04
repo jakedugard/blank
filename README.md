@@ -58,15 +58,21 @@ folder instead. Watching that folder gives live reload for free.
 
 ## Auto-scroll
 
-A capture that scrolls by hand always looks scrolled by hand. **⌥↓** scrolls
-the page down at a set speed, **⌥↑** up; the same key again stops, the
-opposite key turns around. **Hold P** to pause and release to carry on. **Esc**
-stops, and so does touching the wheel or any scroll key — the moment you reach
-for the page it's yours again.
+A capture that scrolls by hand always looks scrolled by hand. The **▼** in
+the bar scrolls the page down at a set speed; **⌥-click** it to scroll up.
+While the page moves the button becomes the stop and the readout beside it
+counts down the pre-roll, shows the direction, or says paused. Click it again
+to stop.
 
-Three settings, per target. Speed lives in the bar as a number — type it,
-drag the arrow to scrub, ↑↓ to step — and the other two are presets under
-••• → Auto-scroll:
+From the keyboard, so your hands are off the mouse when the recording starts:
+**⌥↓** scrolls down, **⌥↑** up; the same key again stops, the opposite key
+turns around. **Hold P** to pause and release to carry on. **Esc** stops, and
+so does touching the wheel or any scroll key — the moment you reach for the
+page it's yours again.
+
+Three settings, per target. Speed sits next to the button as a number — type
+it, drag the gauge to scrub, ↑↓ to step. Easing and pre-roll are presets a
+right-click away (or under ••• → Auto-scroll):
 
 - **Speed** in px/s (default 90).
 - **Easing** — the ramp in ms (default 600). Starting, stopping, pausing and
