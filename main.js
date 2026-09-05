@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, screen, Menu, Tray, nativeImage, shell } = require('electron')
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, screen, Menu, Tray, nativeImage, shell, nativeTheme } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
 const fs = require('fs')
@@ -560,11 +560,18 @@ function hookScrollEvents (wc) {
       return
     }
 
+    // ⌘⇧R records, or stops recording.
+    if (input.meta && input.shift && !input.alt && (input.key === 'r' || input.key === 'R')) {
+      e.preventDefault()
+      if (input.type === 'keyDown' && !input.isAutoRepeat) recordShortcut()
+      return
+    }
+
     // Esc stops. Hold-P lives in the preload: preventing a keyDown here
     // swallows its keyUp too, so main can never see the key released.
-    if (scrollState && scrollState.active && input.key === 'Escape' && input.type === 'keyDown') {
-      e.preventDefault()
-      scrollCmd('stop')
+    if (input.key === 'Escape' && input.type === 'keyDown') {
+      if (scrollState && scrollState.active) { e.preventDefault(); scrollCmd('stop') }
+      else if (record.active()) { e.preventDefault(); stopRecording() }
     }
   })
 
@@ -653,6 +660,8 @@ function buildMenu () {
           { label: 'Stop Scrolling    esc', click: () => scrollCmd('stop') },
           { type: 'separator' }
         ] : []),
+        { label: record.active() ? 'Stop Recording' : 'Record', accelerator: 'Cmd+Shift+R', click: recordShortcut },
+        { type: 'separator' },
         {
           label: 'Focus Bar',
           accelerator: 'Cmd+K',
@@ -816,6 +825,8 @@ function trayMenu () {
     { label: 'Open File or Folder…', click: () => { showRig(); pickTarget() } },
     { label: t ? `Close ${t.name}` : 'Close Page', enabled: !!t, click: closeTarget },
     { type: 'separator' },
+    { label: record.active() ? 'Stop Recording' : 'Record', accelerator: 'Cmd+Shift+R', enabled: !!t, click: recordShortcut },
+    { type: 'separator' },
     barCaptureItem(),
     {
       label: 'Launch at Login',
@@ -832,8 +843,20 @@ function trayMenu () {
   ])
 }
 
+// The menu bar icon carries a red dot while a take runs, since the bar
+// itself may be behind whatever you're doing.
+function trayImage () {
+  const dir = path.join(__dirname, 'ui', 'tray')
+  if (record.active()) {
+    return nativeImage.createFromPath(path.join(dir, nativeTheme.shouldUseDarkColors ? 'recordingDark.png' : 'recordingLight.png'))
+  }
+  return nativeImage.createFromPath(path.join(dir, 'iconTemplate.png'))
+}
+function refreshTray () { if (tray && !tray.isDestroyed()) tray.setImage(trayImage()) }
+nativeTheme.on('updated', refreshTray)
+
 function createTray () {
-  const icon = nativeImage.createFromPath(path.join(__dirname, 'ui', 'tray', 'iconTemplate.png'))
+  const icon = trayImage()
   icon.setTemplateImage(true)
   tray = new Tray(icon)
   tray.setToolTip('blank')
@@ -897,6 +920,7 @@ function startRecording ({ withScroll = false } = {}) {
     radius: FEATURES.radius ? store.radius() : 0, matte: store.matte(),
     onState: async (phase, detail) => {
       recState = { phase, detail, since: Date.now() }
+      refreshTray()
       if (phase === 'recording') {
         if (view && !view.webContents.isDestroyed()) {
           recCursorKey = await view.webContents.insertCSS('* { cursor: none !important; }').catch(() => null)
@@ -927,6 +951,9 @@ ipcMain.on('rec:chunk', (_e, b) => record.chunk(b))
 ipcMain.on('rec:done', record.done)
 ipcMain.on('rec:failed', (_e, m) => record.failed(m))
 ipcMain.handle('stage:record', (_e, opts) => toggleRecording(opts || {}))
+let scrollArmed = false   // the bar has a scroll mode selected, so Record means a take
+ipcMain.on('bar:armed', (_e, on) => { scrollArmed = !!on })
+function recordShortcut () { toggleRecording({ withScroll: scrollArmed }) }
 ipcMain.handle('stage:recordPermission', () => record.openPermissionSettings())
 ipcMain.handle('stage:setMatte', (_e, c) => { if (/^#[0-9a-f]{6}$/i.test(c)) { store.setMatte(c.toLowerCase()); pushState() } })
 

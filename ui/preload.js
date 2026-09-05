@@ -349,6 +349,7 @@ if (isOwnUI) {
     scrollAs:   (m, d) => ipcRenderer.invoke('stage:scrollAs', m, d),
     scrollPreset: (n)  => ipcRenderer.invoke('stage:scrollPreset', n),
     record:     (o)    => ipcRenderer.invoke('stage:record', o),
+    armed:      (on)   => ipcRenderer.send('bar:armed', !!on),
     recordPermission: () => ipcRenderer.invoke('stage:recordPermission'),
     setMatte:   (c)    => ipcRenderer.invoke('stage:setMatte', c),
     setBarWidth: (w)   => ipcRenderer.send('bar:width', w),

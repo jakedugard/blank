@@ -141,7 +141,7 @@
        scroll to the end, settle, stop, reveal the file. Otherwise it records
        until pressed again. The page's cursor is hidden for the take. -->
   <div class="group" id="record" hidden>
-    <button class="btn rec" id="recBtn" title="Record the page"><span class="dot"></span><span class="word">Record</span></button>
+    <button class="btn rec" id="recBtn" title="Record the page · ⌘⇧R"><span class="dot"></span><span class="word">Record</span></button>
   </div>
 
   <div class="group" id="sizeWell">
@@ -480,6 +480,7 @@
     if (scroll.hidden) return
 
     const open = isArmed()
+    stage.armed(open)
     const live = !!(st && st.active)
     for (const b of modeBtns) b.classList.toggle('on', open && b.dataset.mode === sc.mode)
     play.hidden = !open

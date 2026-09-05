@@ -1,13 +1,16 @@
-// Generates every icon from one shape: a square rounded almost, but not
-// quite, to a circle. Run with `node build/icons.js`. Outputs the menu bar
-// template icon (black + alpha, so macOS tints it) and the app .icns.
+// Generates the menu bar icons from the app icon's inner shape: a square
+// with corners rounded to about a fifth of its side, the mark inside
+// build/icon.svg. Run with `node build/icons.js`. Outputs the template icon
+// (black + alpha, so macOS tints it), the recording variants (the same
+// shape with a red dot beside it, in both appearances since a dot can't be
+// a template), and rebuilds the app .icns from build/icon.png.
 const zlib = require('zlib')
 const fs = require('fs')
 const path = require('path')
 const { execSync } = require('child_process')
 
 const INK = [0x16, 0x15, 0x12]
-const ROUND = 0.42            // corner radius as a fraction of the side
+const ROUND = 113.687 / 532.13   // the app icon's inner square: rx over side
 
 function png (w, h, rgba) {
   const crc = (buf) => {
@@ -34,23 +37,31 @@ function png (w, h, rgba) {
   ])
 }
 
-// Signed distance to a rounded square, anti-aliased over one pixel.
-function shape (canvas, side, rgb) {
-  const p = new Uint8Array(canvas * canvas * 4)
+// Signed distance to a rounded square centred at (cx, cy), anti-aliased
+// over one pixel; `dot`, if given, adds a filled circle {x, y, r, rgb}.
+function shape (canvas, side, rgb, { width = canvas, cx = canvas / 2, dot = null } = {}) {
+  const w = width, h = canvas
+  const p = new Uint8Array(w * h * 4)
   const half = side / 2
   const r = side * ROUND
-  const c = canvas / 2
-  for (let y = 0; y < canvas; y++) {
-    for (let x = 0; x < canvas; x++) {
-      const dx = Math.abs(x + 0.5 - c) - (half - r)
-      const dy = Math.abs(y + 0.5 - c) - (half - r)
+  const cy = h / 2
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = Math.abs(x + 0.5 - cx) - (half - r)
+      const dy = Math.abs(y + 0.5 - cy) - (half - r)
       const d = Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) + Math.min(Math.max(dx, dy), 0) - r
-      const a = Math.max(0, Math.min(1, 0.5 - d))
-      const i = (y * canvas + x) * 4
-      p[i] = rgb[0]; p[i + 1] = rgb[1]; p[i + 2] = rgb[2]; p[i + 3] = Math.round(a * 255)
+      let a = Math.max(0, Math.min(1, 0.5 - d))
+      let col = rgb
+      if (dot) {
+        const dd = Math.hypot(x + 0.5 - dot.x, y + 0.5 - dot.y) - dot.r
+        const da = Math.max(0, Math.min(1, 0.5 - dd))
+        if (da > 0) { col = dot.rgb; a = Math.max(a, da) }
+      }
+      const i = (y * w + x) * 4
+      p[i] = col[0]; p[i + 1] = col[1]; p[i + 2] = col[2]; p[i + 3] = Math.round(a * 255)
     }
   }
-  return png(canvas, canvas, p)
+  return png(w, h, p)
 }
 
 const root = path.join(__dirname, '..')
@@ -58,6 +69,16 @@ const root = path.join(__dirname, '..')
 // Menu bar: 18pt canvas, 14pt glyph. Black; macOS handles light/dark.
 fs.writeFileSync(path.join(root, 'ui/tray/iconTemplate.png'), shape(18, 14, [0, 0, 0]))
 fs.writeFileSync(path.join(root, 'ui/tray/iconTemplate@2x.png'), shape(36, 28, [0, 0, 0]))
+
+// Recording: the glyph with a red dot beside it. Not a template (the dot
+// would lose its colour), so one for each menu bar appearance.
+const RED = [0xff, 0x3b, 0x30]
+for (const [name, ink] of [['recordingLight', [0, 0, 0]], ['recordingDark', [255, 255, 255]]]) {
+  for (const k of [1, 2]) {
+    const img = shape(18 * k, 14 * k, ink, { width: 28 * k, cx: 9 * k, dot: { x: 23 * k, y: 9 * k, r: 3 * k, rgb: RED } })
+    fs.writeFileSync(path.join(root, `ui/tray/${name}${k === 2 ? '@2x' : ''}.png`), img)
+  }
+}
 
 // App icon: iconset → icns. The master is build/icon.png, a 1024 render of
 // build/icon.svg on Apple's squircle (824 wide, 100 in, radius 185); render
