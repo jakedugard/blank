@@ -13,6 +13,11 @@ like a recording of a browser. This looks like the work.
 **[Download for Mac](https://github.com/jakedugard/blank/releases/latest/download/blank.dmg)** ·
 free, open source, updates itself.
 
+**Watch a four-minute walkthrough** — the bar, sizing, the scroll settings,
+and a take from start to saved file:
+
+[![Blank Browser: Screen Record — a four-minute walkthrough](docs/demo.png)](https://supercut.ai/share/zib56yAfOKBPqJF7T6ejhi)
+
 ## What it does
 
 - **One page, one exact size.** Pick a preset or type a size, and the
