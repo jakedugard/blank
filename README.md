@@ -11,7 +11,7 @@ prototype, a reel of a launch. A recording of a real browser always looks
 like a recording of a browser. This looks like the work.
 
 **[Download for Mac](https://github.com/jakedugard/blank/releases/latest/download/blank.dmg)** ·
-free, open source, updates itself.
+free, open source, updates itself. ![downloads](https://img.shields.io/github/downloads/jakedugard/blank/blank.dmg?style=flat-square&label=downloads&color=111)
 
 **[Watch a four-minute walkthrough](https://supercut.ai/share/jake-2/zib56yAfOKBPqJF7T6ejhi)** ·
 the bar, sizing, the scroll settings, and a take from start to saved file.
