@@ -102,12 +102,33 @@
   .btn.play.live .go { display:none; }
   .btn.play.live .stop, .btn.play.live .status { display:inline; }
   .btn.play.live:hover { color:var(--ink); }
+
+  /* Back to the top. No well: the arrow is the whole control, and it fades
+     rather than appears. It keeps its slot in the layout either way, so
+     passing a quarter of the page doesn't resize the rig and shunt it
+     sideways. */
+  .top { flex:none; display:flex; align-items:center;
+    opacity:1; transition:opacity .18s ease; }
+  .top.ghost { opacity:0; pointer-events:none; }
+  #topBtn { font:13px/1 var(--font); padding:5px 7px; }
+
+  /* Pins. Armed, the pill is lit like a running take, because the page is
+     inert underneath it and that has to be obvious. */
+  #pinsBtn.on { background:var(--pill); color:var(--accent); }
+  #pinsBtn.on:hover { color:var(--ink); }
 </style>
 
 <div class="bar" id="bar">
   <div class="field">
     <input id="input" spellcheck="false" autocomplete="off"
            placeholder="Drop a file or folder, or paste a URL">
+  </div>
+
+  <!-- Back to the top of the page, once you're far enough down to want it.
+       It lives in the bar rather than over the page because the bar is the
+       part macOS leaves out of a capture. -->
+  <div class="top" id="topWell" hidden>
+    <button class="btn" id="topBtn">↑</button>
   </div>
 
   <!-- Auto-scroll. Steady or Natural selects the mode and opens the play
@@ -119,11 +140,21 @@
     <span class="label" title="Auto-scroll · right-click to fine-tune">Scroll</span>
     <button class="btn" data-mode="steady" title="One speed, start to finish">Steady</button>
     <button class="btn" data-mode="natural" title="A flick, a rest, a flick">Natural</button>
+    <button class="btn" data-mode="pin" title="Travel to each pin and hold there">Pin</button>
     <button class="btn play" id="play" hidden title="Scroll down · ⌥-click scrolls up · ⌥↓ ⌥↑ · hold P to pause · esc stops">
       <span class="sf go" aria-hidden="true">&#x100284;</span><span class="sf stop" aria-hidden="true">&#x1006F7;</span><span class="status" id="scrollStatus"></span>
     </button>
   </div>
   <div class="group" id="presets" hidden></div>
+
+  <!-- Pins. In Pin mode the page travels a screen at a time and rests only on
+       these: each one comes to a stop in the middle of the frame and holds.
+       Arm this and the page goes inert — click a spot to pin it, click a dot
+       to take it away. Right-click the well to clear them. -->
+  <div class="group" id="pinsWell" hidden>
+    <button class="btn" id="pinsBtn" title="Click spots on the page to pin where a take rests">Pins</button>
+    <button class="btn" id="pinsClear" hidden title="Take every pin off this page">Clear</button>
+  </div>
 
   <!-- The numbers behind a preset, for Custom. Each is edited like the
        radius: type, ↑↓ to step, drag the unit to scrub. Which show depends
@@ -135,6 +166,8 @@
     <label class="btn num" data-key="dwell" title="Dwell between flicks · ↑↓ to step · drag unit to scrub"><input inputmode="decimal" spellcheck="false" autocomplete="off"><span class="unit">s rest</span></label>
     <label class="btn num" data-key="variation" title="Variation in stride, dwell and glide · ↑↓ to step · drag unit to scrub"><input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">% vary</span></label>
     <label class="btn num" data-key="pace" title="Glide: how quick the hand is, as a share of the easy pace · ↑↓ to step · drag unit to scrub"><input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">% glide</span></label>
+    <label class="btn num" data-key="hold" title="Hold at a pin · ↑↓ to step · drag unit to scrub"><input inputmode="decimal" spellcheck="false" autocomplete="off"><span class="unit">s hold</span></label>
+    <label class="btn num" data-key="travel" title="What a screen's worth of travel costs · ↑↓ to step · drag unit to scrub"><input inputmode="decimal" spellcheck="false" autocomplete="off"><span class="unit">s a screen</span></label>
   </div>
 
   <!-- Record. With a scroll mode selected it runs the whole take: record,
@@ -285,10 +318,16 @@
     ease:      { min: 0, max: 10000, step: 100, bigStep: 500, scrub: 5, show: (v) => Math.round(v), read: (n) => n },
     stride:    { min: 0.1, max: 3, step: 0.05, bigStep: 0.25, scrub: 0.005, show: (v) => Math.round(v * 100), read: (n) => n / 100 },
     dwell:     { min: 0, max: 30000, step: 100, bigStep: 500, scrub: 10, show: (v) => round(v / 1000, 2), read: (n) => n * 1000 },
+    hold:      { min: 0, max: 30000, step: 100, bigStep: 500, scrub: 10, show: (v) => round(v / 1000, 2), read: (n) => n * 1000 },
+    travel:    { min: 150, max: 5000, step: 50, bigStep: 250, scrub: 5, show: (v) => round(v / 1000, 2), read: (n) => n * 1000 },
     variation: { min: 0, max: 1, step: 0.05, bigStep: 0.25, scrub: 0.005, show: (v) => Math.round(v * 100), read: (n) => n / 100 },
     pace:      { min: 0.3, max: 2, step: 0.05, bigStep: 0.25, scrub: 0.005, show: (v) => Math.round(v * 100), read: (n) => n / 100 }
   }
-  const BY_MODE = { steady: ['speed', 'ease'], natural: ['stride', 'dwell', 'variation', 'pace'] }
+  const BY_MODE = {
+    steady: ['speed', 'ease'],
+    natural: ['stride', 'dwell', 'variation', 'pace'],
+    pin: ['hold', 'travel']
+  }
   const numbers = $('numbers')
   const nums = {}
   for (const root of numbers.querySelectorAll('.num')) {
@@ -344,6 +383,7 @@
       if (isArmed() && scrollNow('mode') === mode) { armed = null; numbersFor = null; render(state); return }
       armed = state.target.id
       if (scrollNow('mode') !== mode) stage.setScroll({ mode }); else render(state)
+      if (mode === 'pin') stage.pins('on')
       back()
     }
   }
@@ -353,9 +393,17 @@
     else stage.scroll(e.altKey ? -1 : 1)
     back()
   }
-  for (const el of [scroll, presets]) {
+  for (const el of [scroll, presets, $('pinsWell')]) {
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); stage.scrollMenu() })
   }
+
+  // --- pins ------------------------------------------------------------------
+  $('pinsBtn').onclick = () => { stage.pins('toggle'); back() }
+  // Starting over shouldn't mean walking down the page unpicking every one.
+  $('pinsClear').onclick = () => { stage.pins('clear'); back() }
+
+  // --- back to the top --------------------------------------------------------
+  $('topBtn').onclick = () => { stage.toTop(); back() }
 
   // --- record -----------------------------------------------------------------
   const recBtn = $('recBtn')
@@ -372,21 +420,14 @@
   stage.onFocusInput(() => input.focus())
   stage.onCustomSize(() => { if (state && state.size) editSize(true) })
   stage.onCustomMatte(() => { matteIn.value = (state && state.matte) || '#ffffff'; matteIn.click() })
-  // Custom… in the menu opens the numbers well, the same as the Custom pill.
-  stage.onCustomScroll((key) => {
-    if (!state || !state.target) return
-    armed = state.target.id
-    numbersFor = state.target.id
-    render(state)
-    const n = nums[key]
-    if (n && !n.field.closest('.num').hidden) n.field.focus()
-  })
 
   // --- render ---------------------------------------------------------------
   stage.onState((s) => {
     state = s
-    // A keyboard start opens the well too, so the readout has somewhere to be.
+    // A keyboard start opens the well too, so the readout has somewhere to be,
+    // and so does pinning from the menu: the pill is how you get back out.
     if (s && s.target && s.scrolling && s.scrolling.active) armed = s.target.id
+    if (s && s.target && s.pins && s.pins.pinning) armed = s.target.id
     render(s)
   })
 
@@ -395,6 +436,9 @@
     const t = s.target
 
     if (!editing) input.value = t ? (t.url || '') : ''
+
+    $('topWell').hidden = !s.target        // nothing to be at the top of
+    $('topWell').classList.toggle('ghost', !s.deep)
 
     $('radius').hidden = !s.features.radius || !s.target   // nothing to round yet; its well hides with it
     radius.sync()
@@ -477,13 +521,16 @@
     clearInterval(countdown)
     scroll.hidden = !s.features.scroll || !s.target || !sc
     presets.hidden = true
-    if (scroll.hidden) return
+    if (scroll.hidden) { $('pinsWell').hidden = true; return }
 
     const open = isArmed()
-    stage.armed(open)
+    // Pin with nothing pinned has no take in it: no play, and Record is a
+    // plain recording rather than a whole take.
+    const ready = sc.mode !== 'pin' || !!(s.pins && s.pins.count)
+    stage.armed(open && ready)
     const live = !!(st && st.active)
     for (const b of modeBtns) b.classList.toggle('on', open && b.dataset.mode === sc.mode)
-    play.hidden = !open
+    play.hidden = !open || !ready
     play.classList.toggle('live', live)
 
     const custom = open && (sc.preset === 'Custom' || numbersFor === s.target.id)
@@ -512,6 +559,7 @@
         b.classList.toggle('on', b.textContent === 'Custom' ? custom : (!custom && b.textContent === sc.preset))
       }
     }
+    renderPins(s, open && sc.mode === 'pin')
     numbers.hidden = !custom
     if (custom) {
       const keys = BY_MODE[sc.mode] || BY_MODE.steady
@@ -537,5 +585,29 @@
     } else {
       status.textContent = arrow
     }
+  }
+
+  // Pins belongs to Pin: it shows with that mode's presets and counts what the
+  // page holds. Armed, the pill is lit, because the page underneath it has
+  // stopped taking clicks and that shouldn't be a surprise.
+  function renderPins (s, show) {
+    const well = $('pinsWell')
+    const btn = $('pinsBtn')
+    well.hidden = !show
+    if (!show) {
+      // The pill is the only way back out of pinning, so it can't go away
+      // while the page underneath is still inert.
+      if (s.pins && s.pins.pinning) stage.pins('off')
+      return
+    }
+    const m = s.pins || { count: 0, pinning: false }
+    $('pinsClear').hidden = !m.count
+    btn.textContent = m.pinning
+      ? (m.count ? `Pinning · ${m.count}` : 'Pinning')
+      : (m.count ? (m.count === 1 ? '1 pin' : `${m.count} pins`) : 'Pins')
+    btn.classList.toggle('on', !!m.pinning)
+    btn.title = m.pinning
+      ? 'Click a spot to pin it, a pin to take it away · click here when you\'re done'
+      : 'Click spots on the page to pin where a take rests · right-click to clear'
   }
 </script>

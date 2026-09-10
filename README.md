@@ -23,8 +23,9 @@ the bar, sizing, the scroll settings, and a take from start to saved file.
 - **Nothing around it.** blank lives in your menu bar. The only control is
   a small bar under the page, and it stays out of your recordings.
 - **Scrolls for you.** A page scrolled by hand looks scrolled by hand.
-  Press Steady for one smooth speed, or Natural for the flick and rest of a
-  hand on a trackpad. Then take your hands off.
+  Press Steady for one smooth speed, Natural for the flick and rest of a hand
+  on a trackpad, or Pin to click the spots a take should stop on. Then take
+  your hands off.
 - **Records itself.** Press Record and blank captures the page alone, straight
   to an MP4 in your Movies folder. With a scroll mode selected, one press is
   the whole take: record, scroll to the end, stop, save.
@@ -35,8 +36,17 @@ the bar, sizing, the scroll settings, and a take from start to saved file.
 ## Using it
 
 Drop a file or folder on the bar, paste a URL, or ⌘O. The page appears above
-the bar. ⌘⇧W closes it, ⌘. hides everything, and the menu bar icon brings it
-back.
+the bar. ⌘⇧W closes it, ⌘H (or ⌘.) hides everything, and the menu bar icon
+brings it back.
+
+Once you're more than a quarter of the way down a page, an **↑** fades in beside
+the address and runs the page back to the top, stopping whatever it was doing.
+It travels rather than cuts, so you can see where it went: a quick eased scroll,
+a third of a second for a screen or two and never more than 0.8s however long
+the page, and touching the wheel hands the page back mid-flight. It's in the bar
+rather than over the page because the bar is the part macOS leaves out of a
+capture, and it holds its slot there whether or not it's showing, so passing
+that quarter mark doesn't resize the rig.
 
 ## Model
 
@@ -50,21 +60,29 @@ file or folder on it, paste a URL, or ⌘O. The stage appears when a target
 loads and goes away with ⌘⇧W (Close Page).
 
 blank lives in the menu bar, not the Dock. Click the icon to summon the rig
-or put it away (⌘. does the same); right-click for Open, Close, Launch at
+or put it away (⌘H and ⌘. do the same); right-click for Open, Close, Launch at
 Login and Quit. Hiding is not quitting — the tray keeps it alive.
+
+Found a bug, or want to say thanks? **Report a Bug** opens onto two ways to do
+it — a mail with the build and macOS version already filled in, or just the
+address, copied — and **Buy Me a Coffee ↗** sits beside it. Both are in ••• ,
+the menu bar icon's menu, and the app menu, above About.
 
 ## Auto-scroll
 
 A capture that scrolls by hand always looks scrolled by hand. The bar's
-**Scroll** well offers two ways to go:
+**Scroll** well offers three ways to go:
 
 - **Steady** is one velocity, start to finish, for showreels and long pages.
 - **Natural** is a flick, a rest, a flick: the way a hand reads a page on a
   wheel or trackpad. Each flick accelerates, glides out over about a second,
   and the page rests before the next.
+- **Pin** stops where you say. Click the spots that matter and the take
+  scrolls to each in turn and holds there. See [Pin](#pin) below.
 
 Pick one and a play button appears beside it, with the mode's presets in the
-next well: Slow, Medium and Fast, or Read, Skim and Sweep. Play scrolls down
+next well: Slow, Medium and Fast for Steady, or Read, Skim and Sweep for
+either of the other two. Play scrolls down
 after a one-second pre-roll, so you can take your hands off before the
 recording shows anything move; **⌥-click** scrolls up. While it runs, play is
 the readout — the countdown, then the direction, or paused — and a click
@@ -73,19 +91,76 @@ keyboard, **⌥↓** and **⌥↑** start (the same key again stops, the opposit
 turns around), **hold P** pauses, and **Esc** stops, as does touching the
 wheel or any scroll key: the moment you reach for the page it's yours.
 
-The presets cover most takes. To go further, right-click the Scroll well
-(or ••• → Auto-scroll) for the numbers behind them, per page:
+The presets cover most takes. To go further, press **Custom** beside them and
+the numbers behind the presets open in the next well, each edited the way the
+radius is: click the value to type, ↑↓ to step, drag the unit to scrub. Which
+numbers show depends on the mode, and a running scroll picks up every change
+live:
 
 - **Speed** in px/s and **Easing**, the ramp in ms, for Steady. Starting,
   stopping, pausing and arriving at the end of the page all use the same
   smoothstep velocity ramp, so every change of motion reads as one gesture.
 - **Stride** (a share of the screen), **Dwell** (the rest between flicks),
   **Glide** (how quick the hand is) and **Variation** (jitter on all of it,
-  so the rhythm isn't a metronome) for Natural. The jitter is seeded: with **Same rhythm each take** on, a
-  re-record of the same page moves exactly the same way.
-- **Pre-roll**, for both.
+  so the rhythm isn't a metronome) for Natural.
+- **Hold** (how long it rests on a pin) and **Travel** (what a screen's worth
+  of it costs) for Pin. Those two are all Pin has.
 
-Both engines run in the preload's isolated world on `requestAnimationFrame`,
+Two settings have no place in the bar, and live in the menu instead — ••• →
+Auto-scroll, or a right-click on the Scroll well: **Pre-roll**, which applies to
+all three modes, and **Same rhythm each take**, which locks Natural's seeded
+jitter so a re-record of the same page moves exactly the same way. Everything
+else the menu used to carry is in the bar, where a number you can scrub beats a
+list of five values.
+
+### Pin
+
+Steady and Natural decide how the page moves. **Pin** decides where it stops.
+
+Picking Pin arms pinning, since that's what you came for: the page goes inert
+and clicks become pins. Click a spot to pin it, click a pin to take it away,
+press **Pins** in the bar when you're done. A pin draws as a hairline red ring
+with a plus in it, big enough to aim at and open enough to read the page
+through.
+
+Then the take scrolls to each pin in turn and stops nowhere else. Every hop is
+one eased move that lands with the pinned spot in the middle of the frame, rests
+there, and goes again; after the last pin it carries on to the bottom, so a take
+still shows the whole page. Nothing interrupts the motion but a pin.
+
+A hop is quick, and its length grows with the root of the distance rather than
+in step with it, so a short hop stays brisk and a long one doesn't drag. It
+arrives the way a flick does, easing out asymptotically rather than braking at
+a constant rate, so the stop is felt rather than seen.
+
+Pins far apart aren't crossed in one move. Beyond a couple of screens the page
+goes in even stages, slowing and gathering itself between them the way a hand
+would, and only the last stage lands on the pin. A stage runs longer the quicker
+the preset, so Sweep doesn't stop as often as Read on the same page: over four
+screens Read takes three flicks, Skim two, and over eight it's five, four and
+three. Two pins close together still get one short hop each. Distance reads as
+travel rather than as a jump.
+
+That leaves Pin two numbers, not five: how long it holds, and what a screen's
+worth of travel costs. Its presets are Natural's, since they mean the same
+thing: **Read** (1.5s holds, 0.9s a screen), **Skim** (1.1s, 0.7s) and **Sweep**
+(0.8s, 0.55s).
+
+A pin is stored as the element you clicked and the offset inside it, not a
+scroll number, so it survives editing the local folder and carries across ⌘L to
+the live URL. If the element goes, the pin falls back to the offset it had.
+
+Pins belong to the page they were put on. A reload, a live-reload while you edit,
+and the ⌘L flip are all the same page, and keep them; following a link is a
+different page, and takes them off. If you were pinning when the page moved,
+you're still pinning when the new one lands. **Clear** appears beside Pins as
+soon as there's one to clear, so starting over isn't a walk down the page
+unpicking them one at a time.
+
+Pinning turns itself off the moment the page starts moving, a take starts, or
+you leave Pin mode, so the rings are never in a recording.
+
+All three engines run in the preload's isolated world on `requestAnimationFrame`,
 so they're frame-accurate and pages can't see them. Pages that scroll a container
 rather than the document get the largest scrollable element.
 
@@ -112,7 +187,7 @@ and record again.
 
 ## Shortcuts
 
-| ⌘O | open | ⌘K | focus bar | ⌘R | reload | ⌘⇧W | close page | ⌘. | hide |
+| ⌘O | open | ⌘K | focus bar | ⌘R | reload | ⌘⇧W | close page | ⌘H ⌘. | hide |
 | ⌥↓ | scroll down | ⌥↑ | scroll up | P (hold) | pause | esc | stop | ⌘⇧R | record |
 
 The stage has no chrome to grab, so **⌘-drag anywhere on the page** moves the
