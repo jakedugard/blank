@@ -962,7 +962,19 @@ function updateItem () {
 function barFloats (on) {
   if (bar && !bar.isDestroyed()) bar.setAlwaysOnTop(on, 'floating')
 }
-app.on('browser-window-focus', () => barFloats(true))
+app.on('browser-window-focus', () => {
+  barFloats(true)
+  clearPermissionNotice()
+})
+
+// The button is the only way back to Record, so it can't sit there for ever:
+// once the permission has been granted, put it back.
+function clearPermissionNotice () {
+  if (!recState || recState.phase !== 'failed') return
+  if (record.permission() !== 'granted') return
+  recState = null
+  pushState()
+}
 app.on('browser-window-blur', () => {
   setTimeout(() => { if (!BrowserWindow.getFocusedWindow()) barFloats(false) }, 50)
 })
@@ -1121,7 +1133,12 @@ function startRecording ({ withScroll = false } = {}) {
         recCursorKey = null
         if (phase === 'saved') shell.showItemInFolder(detail)
         // The outcome shows in the bar for a moment, then the button is itself again.
-        recClear = setTimeout(() => { recState = null; pushState() }, phase === 'saved' ? 2500 : 4000)
+        // "Allow recording ↗" is an instruction, not an outcome: it asks you to
+        // go and grant something, and it used to flash past in four seconds
+        // like a saved file. It stays until the permission is actually there.
+        if (!(phase === 'failed' && record.permission() !== 'granted')) {
+          recClear = setTimeout(() => { recState = null; pushState() }, phase === 'saved' ? 2500 : 4000)
+        }
       }
       pushState()
     }
@@ -1237,6 +1254,7 @@ app.whenReady().then(async () => {
       scrollMenu: scrollSubmenu, recordingMenu: recordingSubmenu,
       fakeUpdate: (r, d) => { updateReady = r; downloading = d; refreshTray() },
       trayImage, updateItem, trayMenuTemplate: () => [updateItem()],
+      hideRig, showRig,
       startRecording, stopRecording, recState: () => recState, startScroll
     })
   }
