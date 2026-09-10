@@ -1,9 +1,10 @@
 // Generates the menu bar icons from the app icon's inner shape: a square
 // with corners rounded to about a fifth of its side, the mark inside
 // build/icon.svg. Run with `node build/icons.js`. Outputs the template icon
-// (black + alpha, so macOS tints it), the recording variants (the same
-// shape with a red dot beside it, in both appearances since a dot can't be
-// a template), and rebuilds the app .icns from build/icon.png.
+// (black + alpha, so macOS tints it), the recording glyph (a red dot in the
+// middle, on a neutral that survives either menu bar), the update badge (a
+// half-alpha dot on the corner, still a template so it stays grey and stays
+// visible), the dot on its own for the menu, and the app .icns.
 const zlib = require('zlib')
 const fs = require('fs')
 const path = require('path')
@@ -55,7 +56,10 @@ function shape (canvas, side, rgb, { width = canvas, cx = canvas / 2, dot = null
       if (dot) {
         const dd = Math.hypot(x + 0.5 - dot.x, y + 0.5 - dot.y) - dot.r
         const da = Math.max(0, Math.min(1, 0.5 - dd))
-        if (da > 0) { col = dot.rgb; a = Math.max(a, da) }
+        // The dot takes the pixel rather than piling onto it, so `alpha` below
+        // 1 reads as a lighter dot even where it lies over the glyph. In a
+        // template that lighter alpha is what macOS renders as grey.
+        if (da > 0) { col = dot.rgb; a = Math.max(a * (1 - da), da * (dot.alpha ?? 1)) }
       }
       const i = (y * w + x) * 4
       p[i] = col[0]; p[i + 1] = col[1]; p[i + 2] = col[2]; p[i + 3] = Math.round(a * 255)
@@ -70,15 +74,55 @@ const root = path.join(__dirname, '..')
 fs.writeFileSync(path.join(root, 'ui/tray/iconTemplate.png'), shape(18, 14, [0, 0, 0]))
 fs.writeFileSync(path.join(root, 'ui/tray/iconTemplate@2x.png'), shape(36, 28, [0, 0, 0]))
 
-// Recording: the glyph with a red dot beside it. Not a template (the dot
-// would lose its colour), so one for each menu bar appearance.
 const RED = [0xff, 0x3b, 0x30]
-for (const [name, ink] of [['recordingLight', [0, 0, 0]], ['recordingDark', [255, 255, 255]]]) {
-  for (const k of [1, 2]) {
-    const img = shape(18 * k, 14 * k, ink, { width: 28 * k, cx: 9 * k, dot: { x: 23 * k, y: 9 * k, r: 3 * k, rgb: RED } })
-    fs.writeFileSync(path.join(root, `ui/tray/${name}${k === 2 ? '@2x' : ''}.png`), img)
-  }
+
+// Update ready: the glyph where it always is, with a dot straddling its
+// top-right corner, the canvas a shade wider so the badge has room without the
+// glyph shifting. A TEMPLATE, unlike the recording variants — which is the
+// whole point. macOS decides the menu bar's appearance from the wallpaper
+// behind it, not from Dark Mode, and it tells nobody: nativeTheme reports the
+// app's appearance, which is a different question. A light-mode Mac with a dark
+// desktop gets a dark menu bar, and a baked-in black glyph vanishes into it.
+// Only template images are tinted to match, so only a template is always seen.
+// Drawn at partial alpha: macOS tints a template by its alpha, so a half-opaque
+// dot comes out grey against whatever the bar is — quiet, and never the same
+// thing as the red of a take in progress.
+for (const k of [1, 2]) {
+  const img = shape(18 * k, 14 * k, [0, 0, 0], {
+    width: 20 * k, cx: 9 * k,
+    dot: { x: 15.8 * k, y: 3.6 * k, r: 3.3 * k, rgb: [0, 0, 0], alpha: 0.5 }
+  })
+  fs.writeFileSync(path.join(root, `ui/tray/updateTemplate${k === 2 ? '@2x' : ''}.png`), img)
 }
+
+// Recording: a red dot in the middle of the glyph. Non-template, because red has
+// to survive and a template is tinted — tinting is exactly what would take the
+// red away. That means the glyph's own colour is baked in, so it can't be black
+// or white: either one vanishes into the menu bar it doesn't suit, which is what
+// the old pair of light/dark variants got wrong. A neutral grey holds up on
+// both, and red reads on both, so one image serves every appearance.
+const GREY = [0x92, 0x92, 0x97]
+for (const k of [1, 2]) {
+  fs.writeFileSync(path.join(root, `ui/tray/recording${k === 2 ? '@2x' : ''}.png`),
+    shape(18 * k, 14 * k, GREY, { dot: { x: 9 * k, y: 9 * k, r: 3.2 * k, rgb: RED } }))
+}
+
+// A bare dot, for the menu item that offers the update. macOS draws menu
+// icons small, so this is only ever a dot.
+function circle (canvas, r, rgb) {
+  const p = new Uint8Array(canvas * canvas * 4)
+  const c = canvas / 2
+  for (let y = 0; y < canvas; y++) {
+    for (let x = 0; x < canvas; x++) {
+      const a = Math.max(0, Math.min(1, 0.5 - (Math.hypot(x + 0.5 - c, y + 0.5 - c) - r)))
+      const i = (y * canvas + x) * 4
+      p[i] = rgb[0]; p[i + 1] = rgb[1]; p[i + 2] = rgb[2]; p[i + 3] = Math.round(a * 255)
+    }
+  }
+  return png(canvas, canvas, p)
+}
+fs.writeFileSync(path.join(root, 'ui/tray/updateDot.png'), circle(12, 3.5, RED))
+fs.writeFileSync(path.join(root, 'ui/tray/updateDot@2x.png'), circle(24, 7, RED))
 
 // App icon: iconset → icns. The master is build/icon.png, a 1024 render of
 // build/icon.svg on Apple's squircle (824 wide, 100 in, radius 185); render

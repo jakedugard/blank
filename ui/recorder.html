@@ -23,7 +23,17 @@
       const video = document.createElement('video')
       video.srcObject = stream
       video.muted = true
-      await video.play()
+      // Not `await video.play()`: this window is never shown, and in a hidden
+      // window that promise can hang forever rather than reject — which left
+      // the take running with no encoder behind it and no way to stop. Ask for
+      // playback, wait only until there are frames to draw, and give up waiting
+      // rather than give up entirely. The size comes from the track, not the
+      // element, so nothing below depends on this having finished.
+      video.play().catch(() => {})
+      await Promise.race([
+        new Promise((r) => { if (video.readyState >= 2) r(); else video.onloadeddata = r }),
+        new Promise((r) => setTimeout(r, 1500))
+      ])
       const { width: W, height: H } = track.getSettings()
       const scale = W / cssWidth
       const r = radius * scale
@@ -69,5 +79,13 @@
     }
   })
 
-  recorder.onStop(() => { if (rec && rec.state === 'recording') rec.stop() })
+  // Stopping has to end the take whatever state we're in. Without this, a stop
+  // arriving before the recorder existed did nothing at all, and main went on
+  // believing a take was running.
+  recorder.onStop(() => {
+    if (rec && rec.state === 'recording') { rec.stop(); return }
+    clearInterval(timer)
+    if (stream) stream.getTracks().forEach((t) => t.stop())
+    recorder.failed('the recorder never started')
+  })
 </script>

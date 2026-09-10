@@ -835,7 +835,7 @@ function popupMoreMenu () {
     reportItem(),
     coffeeItem(),
     aboutItem(),
-    ...(updateReady ? [{ type: 'separator' }, updateItem()] : [])
+    ...(updateReady || downloading ? [{ type: 'separator' }, updateItem()] : [])
   ]).popup({ window: bar })
 }
 
@@ -886,14 +886,27 @@ function aboutItem () {
 // recording: the swap only happens when you choose it, or on quit.
 
 let updateReady = null   // { version } once a build is downloaded and waiting
+let downloading = null   // { version, percent } while one is coming down
 
 function setupUpdates () {
   if (!app.isPackaged) return             // dev runs have nothing to update
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.logger = null
-  autoUpdater.on('update-downloaded', (info) => { updateReady = { version: info.version } })
-  autoUpdater.on('error', (e) => console.log('[blank] update check failed:', e.message))
+  autoUpdater.on('update-available', (info) => { downloading = { version: info.version, percent: 0 } })
+  autoUpdater.on('download-progress', (p) => {
+    if (downloading) downloading.percent = p.percent || 0
+  })
+  autoUpdater.on('update-downloaded', (info) => {
+    downloading = null
+    updateReady = { version: info.version }
+    refreshTray()          // the corner dot is the whole point of noticing
+  })
+  autoUpdater.on('update-not-available', () => { downloading = null })
+  autoUpdater.on('error', (e) => {
+    downloading = null
+    console.log('[blank] update check failed:', e.message)
+  })
   autoUpdater.checkForUpdates().catch(() => {})
   setInterval(() => autoUpdater.checkForUpdates().catch(() => {}), 4 * 60 * 60 * 1000)
 }
@@ -905,17 +918,38 @@ async function checkForUpdatesNow () {
     const latest = r && r.updateInfo && r.updateInfo.version
     if (!latest || latest === app.getVersion()) {
       dialog.showMessageBox({ message: `blank ${app.getVersion()} is up to date.`, buttons: ['OK'] })
+      return
     }
-    // Otherwise the download is already under way; the menu will offer it.
+    // Saying nothing here is what made this look broken: the download is the
+    // slow part, and it used to happen with no sign of it anywhere.
+    if (!updateReady) {
+      dialog.showMessageBox({
+        message: `Downloading blank ${latest}…`,
+        detail: 'It\u2019ll be offered in the menu bar when it\u2019s ready. Nothing installs until you pick it.',
+        buttons: ['OK']
+      })
+    }
   } catch (e) {
     dialog.showMessageBox({ type: 'warning', message: 'Couldn\u2019t check for updates.', detail: e.message, buttons: ['OK'] })
   }
 }
 
+// Three states, because the middle one used to look like nothing happening:
+// waiting with a dot beside it, coming down with a percentage, or just the
+// version you're on.
 function updateItem () {
-  return updateReady
-    ? { label: `Update to ${updateReady.version}`, click: () => autoUpdater.quitAndInstall() }
-    : { label: `blank ${app.getVersion()}`, enabled: false }
+  if (updateReady) {
+    return {
+      label: `Update to ${updateReady.version}`,
+      icon: nativeImage.createFromPath(path.join(__dirname, 'ui', 'tray', 'updateDot.png')),
+      click: () => autoUpdater.quitAndInstall()
+    }
+  }
+  if (downloading) {
+    const pct = downloading.percent > 0 ? `  ${Math.round(downloading.percent)}%` : ''
+    return { label: `Downloading ${downloading.version}…${pct}`, enabled: false }
+  }
+  return { label: `blank ${app.getVersion()}`, enabled: false }
 }
 
 // --- menu bar ---------------------------------------------------------------
@@ -989,13 +1023,16 @@ function trayMenu () {
   ])
 }
 
-// The menu bar icon carries a red dot while a take runs, since the bar
-// itself may be behind whatever you're doing.
+// The menu bar icon carries a red dot while a take runs, since the bar itself
+// may be behind whatever you're doing, and a dot on its corner while an update
+// is waiting. Recording wins: it's the one that's happening right now.
 function trayImage () {
   const dir = path.join(__dirname, 'ui', 'tray')
-  if (record.active()) {
-    return nativeImage.createFromPath(path.join(dir, nativeTheme.shouldUseDarkColors ? 'recordingDark.png' : 'recordingLight.png'))
-  }
+  if (record.active()) return nativeImage.createFromPath(path.join(dir, 'recording.png'))
+  // Template: macOS tints it for whatever the menu bar actually is. See the
+  // note in build/icons.js — nativeTheme reports the app's appearance, which is
+  // a different question, and there is no API for the one we'd want.
+  if (updateReady) return nativeImage.createFromPath(path.join(dir, 'updateTemplate.png'))
   return nativeImage.createFromPath(path.join(dir, 'iconTemplate.png'))
 }
 function refreshTray () { if (tray && !tray.isDestroyed()) tray.setImage(trayImage()) }
@@ -1198,6 +1235,8 @@ app.whenReady().then(async () => {
       scrollState: () => scrollState,
       setPinning, setPins, pinsNow: pinsOf, pinningNow: () => pinning,
       scrollMenu: scrollSubmenu, recordingMenu: recordingSubmenu,
+      fakeUpdate: (r, d) => { updateReady = r; downloading = d; refreshTray() },
+      trayImage, updateItem, trayMenuTemplate: () => [updateItem()],
       startRecording, stopRecording, recState: () => recState, startScroll
     })
   }
