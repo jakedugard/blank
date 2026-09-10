@@ -8,6 +8,7 @@ const fs = require('fs')
 const path = require('path')
 
 const FPS = 60
+const START_TIMEOUT = 6000   // the encoder has this long to say it's rolling
 const BITRATE = 40e6   // 40 Mb/s: generous for 2880×1800 UI motion, small on disk per second
 
 let recWin = null      // the hidden encoder window
@@ -72,7 +73,12 @@ async function start ({ stage, preload, name, matte = '#ffffff', radius = 0, onS
   }
 
   const file = path.join(folder(), `${(name || 'blank').replace(/[/:]/g, '-')} ${stamp()}.mp4`)
-  job = { file, stream: fs.createWriteStream(file), onState, bytes: 0 }
+  job = { file, stream: fs.createWriteStream(file), onState, bytes: 0, watchdog: null }
+  // If the encoder never reports back, the take is over before it began. Say so
+  // rather than sit in a recording state nothing can leave.
+  job.watchdog = setTimeout(() => {
+    if (job && !job.rolling) failed('the recorder did not start')
+  }, START_TIMEOUT)
   win.webContents.send('rec:start', { fps: FPS, bitrate: BITRATE, matte, radius, cssWidth: stage.getContentSize()[0] })
 }
 
@@ -88,7 +94,10 @@ function chunk (buf) {
 }
 
 function started () {
-  if (job) job.onState('recording', job.file)
+  if (!job) return
+  job.rolling = true
+  clearTimeout(job.watchdog)
+  job.onState('recording', job.file)
 }
 
 function done () {
@@ -96,6 +105,7 @@ function done () {
   job = null
   source = null
   if (!j) return
+  clearTimeout(j.watchdog)
   j.stream.end(() => {
     if (j.bytes === 0) { fs.rm(j.file, () => {}); j.onState('failed', 'nothing was recorded'); return }
     j.onState('saved', j.file)
@@ -107,6 +117,7 @@ function failed (why) {
   job = null
   source = null
   if (!j) return
+  clearTimeout(j.watchdog)
   j.stream.end(() => fs.rm(j.file, () => {}))
   j.onState('failed', why)
 }
