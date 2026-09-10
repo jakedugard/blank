@@ -1,4 +1,4 @@
-const { app, BrowserWindow, WebContentsView, ipcMain, dialog, screen, Menu, Tray, nativeImage, shell, nativeTheme } = require('electron')
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, screen, Menu, Tray, nativeImage, shell, nativeTheme, clipboard } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
 const fs = require('fs')
@@ -17,7 +17,7 @@ let barWidth = BAR.w   // grows to fit open wells, see 'bar:width'
 const FEATURES = { radius: true, scroll: true }
 
 // Auto-scroll defaults for targets that predate the setting.
-const SCROLL_DEFAULTS = { mode: 'steady', speed: 140, ease: 600, preroll: 1000, stride: 0.65, dwell: 200, variation: 0.3, pace: 0.85, lockSeed: false, seed: 0 }   // Medium and Skim
+const SCROLL_DEFAULTS = { mode: 'steady', speed: 140, ease: 600, preroll: 1000, stride: 0.65, dwell: 200, variation: 0.3, pace: 0.85, hold: 1500, travel: 900, lockSeed: false, seed: 0 }   // Medium and Skim
 // Presets per mode: a word instead of numbers. Anything else is Custom.
 const SCROLL_PRESETS = {
   steady: [
@@ -29,6 +29,13 @@ const SCROLL_PRESETS = {
     { name: 'Read', stride: 0.35, dwell: 600, variation: 0.35, pace: 1 },
     { name: 'Skim', stride: 0.65, dwell: 200, variation: 0.3, pace: 0.85 },
     { name: 'Sweep', stride: 1.1, dwell: 60, variation: 0.15, pace: 0.55 }
+  ],
+  // Pin has two numbers: how long it rests on a pin, and what a screen's worth
+  // of travel costs. Stride, dwell and speed aren't Pin's to set.
+  pin: [
+    { name: 'Read', hold: 1500, travel: 900 },
+    { name: 'Skim', hold: 1100, travel: 700 },
+    { name: 'Sweep', hold: 800, travel: 550 }
   ]
 }
 
@@ -47,7 +54,8 @@ const current = {
   target: null,
   source: 'local',
   server: null,
-  watcher: null
+  watcher: null,
+  url: null      // what we last asked the view to load, see onNavigated
 }
 
 // --- windows ----------------------------------------------------------------
@@ -110,7 +118,7 @@ function createStage () {
 // The stage leaves with a short fade rather than cutting (arriving is the
 // page's own job, see showStage). One fade at a time per window.
 
-// Expo-out: fast off the mark, then a long settle.
+// Expo-out: fast off the pin, then a long settle.
 const EASE_OUT = (t) => t >= 1 ? 1 : 1 - 2 ** (-10 * t)
 const fading = new WeakMap()
 
@@ -329,6 +337,8 @@ async function teardownSource () {
 async function loadTarget (target, source, { keepScroll = false } = {}) {
   if (!target) return
   const y = keepScroll ? await getScroll() : 0
+  pinning = false   // a fresh page carries no overlay, whatever the last one had
+  scrollDeep = false
 
   current.target = target
   current.source = source
@@ -355,6 +365,7 @@ async function loadTarget (target, source, { keepScroll = false } = {}) {
 
   if (!url) { closeTarget(); return }
 
+  current.url = url
   applySize(target.size, { save: false })
   await view.webContents.loadURL(url).catch(() => {})
   if (keepScroll && y) restoreScroll(y)
@@ -383,6 +394,7 @@ function restoreScroll (y) {
 
 async function closeTarget () {
   current.target = null
+  pinning = false
   teardownSource()
   await hideStage()
   if (view) view.webContents.loadURL('about:blank').catch(() => {})
@@ -425,6 +437,8 @@ function pushState () {
     scroll: { ...scrollSettings(), preset: scrollPreset() },
     scrollPresets: Object.fromEntries(Object.entries(SCROLL_PRESETS).map(([m, l]) => [m, l.map(p => p.name)])),
     scrolling: scrollState,
+    pins: { count: pinsOf().length, pinning },
+    deep: scrollDeep,
     recording: recState,
     recordPermission: record.permission(),
     matte: store.matte(),
@@ -474,6 +488,8 @@ async function pickTarget () {
 // the settings, the shortcuts, and the last phase the engine reported.
 
 let scrollState = null
+// Whether the page is far enough down to be worth offering a way back up.
+let scrollDeep = false
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
 
@@ -484,7 +500,7 @@ function scrollSettings () {
     : ({ none: 0, gentle: 600, soft: 1200 }[s.easing] ?? SCROLL_DEFAULTS.ease)
   const num = (k) => Number.isFinite(s[k]) ? s[k] : SCROLL_DEFAULTS[k]
   return {
-    mode: s.mode === 'natural' ? 'natural' : 'steady',
+    mode: s.mode === 'natural' ? 'natural' : s.mode === 'pin' ? 'pin' : 'steady',
     speed: num('speed'),
     ease,
     preroll: num('preroll'),
@@ -492,8 +508,11 @@ function scrollSettings () {
     dwell: num('dwell'),
     variation: num('variation'),
     pace: num('pace'),
+    hold: num('hold'),
+    travel: num('travel'),
     lockSeed: !!s.lockSeed,
-    seed: num('seed')
+    seed: num('seed'),
+    pins: pinsOf()
   }
 }
 
@@ -512,10 +531,12 @@ function applyScrollPreset (name) {
 
 function setScroll (patch) {
   if (!current.target) return
+  const was = scrollSettings().mode
   const n = { ...scrollSettings(), ...patch }
+  if (n.mode !== 'pin') setPinning(false)   // pinning is Pin's, and only Pin's
   store.update(current.target.id, {
     scroll: {
-      mode: n.mode === 'natural' ? 'natural' : 'steady',
+      mode: n.mode === 'natural' ? 'natural' : n.mode === 'pin' ? 'pin' : 'steady',
       speed: clamp(Math.round(n.speed) || SCROLL_DEFAULTS.speed, 5, 2000),
       ease: clamp(Math.round(n.ease) || 0, 0, 10000),
       preroll: clamp(Math.round(n.preroll) || 0, 0, 30000),
@@ -523,10 +544,13 @@ function setScroll (patch) {
       dwell: clamp(Math.round(n.dwell) || 0, 0, 30000),
       variation: clamp(Number(n.variation) || 0, 0, 1),
       pace: clamp(Number(n.pace) || SCROLL_DEFAULTS.pace, 0.3, 2),
+      hold: clamp(Math.round(n.hold) || 0, 0, 30000),
+      travel: clamp(Math.round(n.travel) || SCROLL_DEFAULTS.travel, 150, 5000),
       lockSeed: !!n.lockSeed,
       seed: Math.round(n.seed) || 0
     }
   })
+  if (n.mode === 'pin' && was !== 'pin') setPinning(true)   // arriving in Pin is asking to pin
   pushState()
   // A running scroll picks the change up live; pre-roll and seed wait for the next start.
   if (scrollState && scrollState.active) scrollCmd('tune')
@@ -537,9 +561,65 @@ function scrollCmd (cmd, extra = {}) {
   view.webContents.send('scroll:cmd', { cmd, ...scrollSettings(), ...extra })
 }
 
+// --- pins ------------------------------------------------------------------
+// A pin is a resting place in the page, kept with the target. Natural still
+// flicks by stride; when a flick can reach a pin it lands there and holds.
+// Pinning makes the page inert and turns clicks into pins; it can't be on
+// while the page is moving or a take is running, since the overlay would
+// record.
+
+let pinning = false
+let rearmPins = false   // pinning was on when the page went away, see hookScrollEvents
+
+function pinsOf () {
+  const m = current.target && current.target.pins
+  return Array.isArray(m) ? m : []
+}
+
+function setPins (pins) {
+  if (!current.target) return
+  store.update(current.target.id, { pins })
+  if (pinning) pinsCmd('arm')
+  pushState()
+  if (scrollState && scrollState.active) scrollCmd('tune')
+}
+
+function pinsCmd (cmd) {
+  if (!view || !current.target || view.webContents.isDestroyed()) return
+  view.webContents.send('pins:cmd', { cmd, pins: pinsOf() })
+}
+
+function setPinning (on) {
+  const want = !!on && !!current.target && !(scrollState && scrollState.active) && !record.active()
+  if (want === pinning) { if (!want) pinsCmd('disarm'); return }
+  pinning = want
+  pinsCmd(pinning ? 'arm' : 'disarm')
+  if (pinning && stage && !stage.isDestroyed()) stage.focus()   // the clicks have to land on the page
+  pushState()
+}
+
+ipcMain.on('pins:add', (e, m) => {
+  if (!view || e.sender !== view.webContents || !pinning) return
+  setPins([...pinsOf(), {
+    sel: m.sel || null,
+    dy: Math.round(m.dy) || 0,
+    dx: Math.round(m.dx) || 0,
+    y: Math.round(m.y) || 0,
+    xf: Number.isFinite(m.xf) ? m.xf : 0.5
+  }])
+})
+
+ipcMain.on('pins:remove', (e, i) => {
+  if (!view || e.sender !== view.webContents || !pinning) return
+  const pins = pinsOf()
+  if (!pins[i]) return
+  setPins(pins.filter((_, idx) => idx !== i))
+})
+
 // ⌥↓ while already scrolling down stops; ⌥↑ mid-run turns around.
 function startScroll (dir) {
   if (scrollState && scrollState.active && scrollState.dir === dir) { scrollCmd('stop'); return }
+  setPinning(false)   // the overlay is never in a take
   const s = scrollSettings()
   // A natural take is seeded so it can be repeated. Fresh each time unless
   // the rhythm is locked, in which case the last seed is reused.
@@ -560,6 +640,14 @@ function hookScrollEvents (wc) {
       return
     }
 
+    // ⌘. puts the rig away, the same as ⌘H. It's a key rather than a menu item
+    // so Hide isn't listed twice under two menus that are both called blank.
+    if (input.meta && !input.shift && !input.alt && input.key === '.') {
+      e.preventDefault()
+      if (input.type === 'keyDown' && !input.isAutoRepeat) hideRig()
+      return
+    }
+
     // ⌘⇧R records, or stops recording.
     if (input.meta && input.shift && !input.alt && (input.key === 'r' || input.key === 'R')) {
       e.preventDefault()
@@ -576,8 +664,35 @@ function hookScrollEvents (wc) {
   })
 
   // A full navigation replaces the preload world, and the engine with it.
-  wc.on('did-navigate', () => { scrollState = null; pushState() })
+  wc.on('did-navigate', (_e, url) => {
+    scrollState = null
+    rearmPins = pinning     // if you were pinning, you still are once it lands
+    pinning = false
+    scrollDeep = false
+    // Somewhere we didn't send it: the pins were placed on the page we left.
+    if (current.target && url !== current.url) {
+      current.url = url
+      if (pinsOf().length) store.update(current.target.id, { pins: [] })
+    }
+    pushState()
+  })
+
+  // The preload world is new, so the overlay went with the old one. Put it back
+  // for whoever was in the middle of pinning — but never on a page you only
+  // just opened, where an inert page would be a surprise.
+  wc.on('did-finish-load', () => {
+    if (!rearmPins) return
+    rearmPins = false
+    setPinning(true)
+  })
 }
+
+ipcMain.on('scroll:depth', (e, d) => {
+  if (!view || e.sender !== view.webContents) return
+  if (scrollDeep === !!d) return
+  scrollDeep = !!d
+  pushState()
+})
 
 ipcMain.on('scroll:state', (e, st) => {
   if (!view || e.sender !== view.webContents) return
@@ -591,49 +706,27 @@ function scrollSubmenu () {
   const s = scrollSettings()
   const t = current.target
   const active = !!(scrollState && scrollState.active)
-  const natural = s.mode === 'natural'
-
-  const pick = (values, key, fmt, custom = true) => values.map(v => ({
-    label: fmt(v), type: 'checkbox', checked: s[key] === v, click: () => setScroll({ [key]: v })
-  })).concat(custom ? [{ type: 'separator' }, {
-    label: 'Custom…', click: () => bar && bar.webContents.send('custom-scroll', key)
-  }] : [])
-  const ms = (v) => v ? `${v} ms` : 'None'
   const sec = (v) => v ? `${v / 1000} s` : 'None'
-  const pct = (v) => v ? `${Math.round(v * 100)}%` : 'None'
-  const screens = (v) => v === 1 ? 'Full screen' : `${Math.round(v * 100)}% of screen`
-  const glide = (v) => ({ 0.55: 'Quick', 0.85: 'Brisk', 1: 'Easy', 1.4: 'Slow' }[v] || `${Math.round(v * 100)}%`)
+  const pick = (values, key, fmt) => values.map(v => ({
+    label: fmt(v), type: 'checkbox', checked: s[key] === v, click: () => setScroll({ [key]: v })
+  }))
 
-  const preset = scrollPreset(s)
-  const presets = SCROLL_PRESETS[s.mode].map(p => ({
-    label: p.name, type: 'radio', checked: preset === p.name, click: () => applyScrollPreset(p.name)
-  })).concat({ label: 'Custom', type: 'radio', checked: preset === 'Custom', enabled: preset === 'Custom' })
-
-  // Only the settings the chosen mode reads. Pre-roll applies to both.
-  const settings = natural ? [
-    { label: `Stride: ${screens(s.stride)}`, submenu: pick([0.25, 0.5, 0.75, 1, 1.25, 1.5, 2], 'stride', screens) },
-    { label: `Dwell: ${sec(s.dwell)}`, submenu: pick([100, 200, 400, 600, 1000], 'dwell', sec) },
-    { label: `Variation: ${pct(s.variation)}`, submenu: pick([0, 0.15, 0.3, 0.5], 'variation', pct) },
-    { label: `Glide: ${glide(s.pace)}`, submenu: pick([0.55, 0.85, 1, 1.4], 'pace', glide) },
-    { label: 'Same rhythm each take', type: 'checkbox', checked: s.lockSeed, click: () => setScroll({ lockSeed: !s.lockSeed }) }
-  ] : [
-    { label: `Speed: ${s.speed} px/s`, submenu: pick([60, 100, 140, 200, 300], 'speed', v => `${v} px/s`) },
-    { label: `Easing: ${ms(s.ease)}`, submenu: pick([0, 300, 600, 1200, 2000], 'ease', ms) }
-  ]
-
+  // The mode, its presets, the numbers behind them and the pins are all in the
+  // bar now, and the bar does them better: a number you can scrub beats a list
+  // of five values. What's left here is what the bar has nowhere to put.
   return [
     { label: 'Scroll Down    ⌥↓', enabled: !!t, click: () => startScroll(1) },
     { label: 'Scroll Up    ⌥↑', enabled: !!t, click: () => startScroll(-1) },
     { label: 'Stop    esc', enabled: active, click: () => scrollCmd('stop') },
     { label: 'Hold P to pause', enabled: false },
     { type: 'separator' },
-    { label: 'Steady', type: 'radio', checked: !natural, click: () => setScroll({ mode: 'steady' }) },
-    { label: 'Natural', type: 'radio', checked: natural, click: () => setScroll({ mode: 'natural' }) },
-    { type: 'separator' },
-    ...presets,
-    { type: 'separator' },
-    ...settings,
-    { label: `Pre-roll: ${sec(s.preroll)}`, submenu: pick([0, 500, 1000, 2000, 3000], 'preroll', sec, false) }
+    { label: `Pre-roll: ${sec(s.preroll)}`, submenu: pick([0, 500, 1000, 2000, 3000], 'preroll', sec) },
+    ...(s.mode === 'natural' ? [{
+      label: 'Same rhythm each take',
+      type: 'checkbox',
+      checked: s.lockSeed,
+      click: () => setScroll({ lockSeed: !s.lockSeed })
+    }] : [])
   ]
 }
 
@@ -645,7 +738,23 @@ function popupScrollMenu () {
 
 function buildMenu () {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { role: 'appMenu' },
+    // Spelled out rather than `role: 'appMenu'`, because the Hide role owns ⌘H
+    // and blank's hiding is its own thing: the rig goes away, the tray doesn't.
+    {
+      label: app.name,
+      submenu: [
+        reportItem(),
+        coffeeItem(),
+        { type: 'separator' },
+        aboutItem(),
+        { type: 'separator' },
+        { label: 'Hide blank', accelerator: 'Cmd+H', click: hideRig },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
     {
       label: 'blank',
       submenu: [
@@ -671,8 +780,7 @@ function buildMenu () {
             bar.focus()
             bar.webContents.send('focus-input')
           }
-        },
-        { label: 'Hide blank', accelerator: 'Cmd+.', click: hideRig }
+        }
       ]
     },
     { role: 'editMenu' },
@@ -724,6 +832,8 @@ function popupMoreMenu () {
     barCaptureItem(),
     { label: 'Hide blank', accelerator: 'Cmd+.', click: hideRig },
     { type: 'separator' },
+    reportItem(),
+    coffeeItem(),
     aboutItem(),
     ...(updateReady ? [{ type: 'separator' }, updateItem()] : [])
   ]).popup({ window: bar })
@@ -732,6 +842,40 @@ function popupMoreMenu () {
 // The one link out: the project page, where the story, the source and a
 // way to say thanks live. The arrow says it leaves the app.
 const ABOUT_URL = 'https://github.com/jakedugard/blank'
+const COFFEE_URL = 'https://buy.stripe.com/14A8wI3kb7X4f4E85Obwk07'
+const BUGS_TO = 'hello@jakedugard.com'
+
+// A bug report is worth more with the build it happened on, so the mail opens
+// with that already in it and the cursor above the line.
+// A submenu rather than one item: a native menu item is a label and a click,
+// with nowhere to hang a button, so hovering is the only way to offer the
+// address as something you can take rather than only something you can mail.
+function reportItem () {
+  const mail = () => {
+    const subject = `blank ${app.getVersion()} — bug`
+    const body = [
+      '', '', '',
+      '——',
+      `blank ${app.getVersion()}`,
+      `macOS ${process.getSystemVersion()} (${process.arch})`,
+      `Electron ${process.versions.electron}`
+    ].join('\n')
+    shell.openExternal(
+      `mailto:${BUGS_TO}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    ).catch(() => {})
+  }
+  return {
+    label: 'Report a Bug',
+    submenu: [
+      { label: `Email ${BUGS_TO}…`, click: mail },
+      { label: 'Copy Email Address', click: () => clipboard.writeText(BUGS_TO) }
+    ]
+  }
+}
+
+function coffeeItem () {
+  return { label: 'Buy Me a Coffee  ↗', click: () => shell.openExternal(COFFEE_URL).catch(() => {}) }
+}
 function aboutItem () {
   return { label: `About blank  ↗`, click: () => shell.openExternal(ABOUT_URL) }
 }
@@ -837,6 +981,8 @@ function trayMenu () {
     },
     { label: 'Check for Updates…', enabled: app.isPackaged, click: checkForUpdatesNow },
     { type: 'separator' },
+    reportItem(),
+    coffeeItem(),
     aboutItem(),
     { type: 'separator' },
     { label: 'Quit blank', accelerator: 'Cmd+Q', click: () => app.quit() }
@@ -882,8 +1028,13 @@ ipcMain.handle('stage:scrollMenu', popupScrollMenu)
 ipcMain.handle('stage:setScroll', (_e, patch) => setScroll(patch || {}))
 ipcMain.handle('stage:scroll', (_e, dir) => startScroll(dir < 0 ? -1 : 1))
 ipcMain.handle('stage:scrollStop', () => scrollCmd('stop'))
+ipcMain.handle('stage:toTop', () => scrollCmd('top'))
 ipcMain.handle('stage:scrollAs', (_e, mode, dir) => { setScroll({ mode }); startScroll(dir < 0 ? -1 : 1) })
 ipcMain.handle('stage:scrollPreset', (_e, name) => applyScrollPreset(name))
+ipcMain.handle('stage:pins', (_e, cmd) => {
+  if (cmd === 'clear') setPins([])
+  else setPinning(cmd === 'on' ? true : cmd === 'off' ? false : !pinning)
+})
 ipcMain.handle('stage:focusStage', () => stage && stage.isVisible() && stage.focus())
 
 // Manual drag: both windows move from a recorded origin plus the pointer delta,
@@ -913,6 +1064,7 @@ let recClear = null
 
 function startRecording ({ withScroll = false } = {}) {
   if (record.active() || !current.target) return
+  setPinning(false)   // the overlay is never in a take
   clearTimeout(recClear)
   recTake = { withScroll }
   record.start({
@@ -959,9 +1111,10 @@ ipcMain.handle('stage:setMatte', (_e, c) => { if (/^#[0-9a-f]{6}$/i.test(c)) { s
 
 function recordingSubmenu () {
   const matte = store.matte()
+  const named = { '#ffffff': 'White', '#000000': 'Black' }[matte.toLowerCase()] || matte
   const pick = (label, c) => ({ label, type: 'radio', checked: matte.toLowerCase() === c, click: () => { store.setMatte(c); pushState() } })
   return [
-    { label: `Matte: ${matte}`, submenu: [
+    { label: `Corner Fill: ${named}`, submenu: [
       pick('White', '#ffffff'), pick('Black', '#000000'),
       { type: 'separator' },
       { label: 'Custom…', click: () => bar && bar.webContents.send('custom-matte') }
@@ -1043,6 +1196,8 @@ app.whenReady().then(async () => {
       startScroll, scrollCmd, setScroll, setRadius, applySize, openPath, closeTarget, storeRadius: () => store.radius(), toggleRig,
       storeBarInCaptures: () => store.barInCaptures(), scrollSettingsNow: scrollSettings, setBarInCaptures: (on) => { store.setBarInCaptures(on); applyBarCapture() },
       scrollState: () => scrollState,
+      setPinning, setPins, pinsNow: pinsOf, pinningNow: () => pinning,
+      scrollMenu: scrollSubmenu, recordingMenu: recordingSubmenu,
       startRecording, stopRecording, recState: () => recState, startScroll
     })
   }
