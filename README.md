@@ -232,8 +232,12 @@ macOS captures the stage window alone: `desktopCapturer` finds it by
 to whatever asks for it. The encoder is Chromium's own `MediaRecorder`, which
 in Electron 44 writes H.264 MP4 directly (`video/mp4;codecs=avc1.64002A`). It
 has to run in a renderer, so a hidden window hosts it and streams chunks back
-to main to be written to disk. Frames pass through a canvas that paints the
-matte behind the rounded corners, since a transparent corner records black.
+to main to be written to disk. Frames are pulled off the capture track as macOS
+delivers them and each is painted and handed on at once, so the file holds one
+frame per captured frame with the capture's own timing (an earlier timer-driven
+recorder sampled at 62.5 Hz and repeated about one frame in nine of a scroll).
+Each frame passes through a canvas that paints the matte behind the rounded
+corners, since a transparent corner records black.
 There is no API to keep the cursor out of a window capture, so the page gets
 `cursor: none` for the take. Verified at 2880 × 1800, 60 fps, while scrolling.
 
