@@ -18,6 +18,7 @@
   let rec = null
   let stream = null
   let reader = null
+  let heartbeat = 0
 
   recorder.onStart(async ({ fps, bitrate, matte, radius, scale, cssWidth, cssHeight }) => {
     try {
@@ -60,6 +61,9 @@
 
       const out = canvas.captureStream(0)
       const outTrack = out.getVideoTracks()[0]
+      let last = null          // the newest frame, kept so stillness can be repainted
+      let lastAt = 0
+      const t0 = performance.now()
       reader = new MediaStreamTrackProcessor({ track }).readable.getReader()
       ;(async () => {
         for (;;) {
@@ -67,10 +71,27 @@
           if (done) break
           if (frame.displayWidth !== src.w || frame.displayHeight !== src.h) size(frame.displayWidth, frame.displayHeight)
           paint(frame)
-          frame.close()
+          if (last) last.close()
+          last = frame
           outTrack.requestFrame()
+          lastAt = performance.now()
         }
+        if (last) { last.close(); last = null }
       })().catch((e) => { if (rec && rec.state === 'recording') recorder.failed(String(e && e.message || e)) })
+      // macOS only delivers a frame when the window's pixels change, so a
+      // still page would leave the file short — or, if nothing ever changed,
+      // empty. Two answers: until the first frame arrives, main is asked to
+      // repaint the stage, which counts as a change; after that, whenever the
+      // capture has been quiet for two and a half frames, the newest
+      // frame is painted and sent again with a fresh timestamp. (Asking the
+      // canvas stream for a frame without painting sends nothing.) Motion
+      // never trips this; stillness is held with genuine duplicates.
+      heartbeat = setInterval(() => {
+        const now = performance.now()
+        if (!last) { if (now - t0 > 60 && Math.round(now / (1000 / fps)) % 8 === 0) recorder.kick(); return }
+        if (now - lastAt > 2500 / fps) { paint(last); outTrack.requestFrame(); lastAt = now }
+      }, 1000 / fps)
+
 
       // Level 5.1: 4.2 tops out around 1080p60, and a 2× 1440×900 stage is
       // well past that. Chrome and QuickTime never minded; stricter decoders do.
@@ -81,6 +102,7 @@
       rec.ondataavailable = (e) => { if (e.data.size) e.data.arrayBuffer().then((b) => recorder.chunk(b)) }
       rec.onerror = (e) => recorder.failed(String(e.error || e))
       rec.onstop = () => {
+        clearInterval(heartbeat)
         reader.cancel().catch(() => {})
         stream.getTracks().forEach((t) => t.stop())
         outTrack.stop()
@@ -90,6 +112,7 @@
       rec.start(250)
       recorder.started()
     } catch (e) {
+      clearInterval(heartbeat)
       recorder.failed(e && e.message ? e.message : String(e))
     }
   })
@@ -99,6 +122,7 @@
   // believing a take was running.
   recorder.onStop(() => {
     if (rec && rec.state === 'recording') { rec.stop(); return }
+    clearInterval(heartbeat)
     if (reader) reader.cancel().catch(() => {})
     if (stream) stream.getTracks().forEach((t) => t.stop())
     recorder.failed('the recorder never started')

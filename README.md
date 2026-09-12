@@ -210,7 +210,9 @@ at the end, stops, and saves. One press, one finished clip.
 The page's cursor is hidden for the length of the take. Rounded corners are
 matted, white by default; ••• → Recording sets Black or any colour, so the
 clip drops into a deck or a timeline without a transparent edge going black.
-**Output Size**, in the same menu, is 2× by default (the display's own pixels
+**Show Cursor**, in the same menu, leaves the pointer in the take for a
+click-through of a prototype; it's off by default, so a scroll take is only
+the page. **Output Size** is 2× by default (the display's own pixels
 on a Retina Mac, 2880 × 1800 for a 1440 × 900 page) or 1× for a clip at CSS
 size, half the dimensions and a fraction of the file, for the web or a DM.
 The menu bar icon carries a red dot while a take is running.

@@ -874,6 +874,7 @@ if (isRecorder) {
     started: ()   => ipcRenderer.send('rec:started'),
     chunk:   (b)  => ipcRenderer.send('rec:chunk', b),
     done:    ()   => ipcRenderer.send('rec:done'),
-    failed:  (m)  => ipcRenderer.send('rec:failed', m)
+    failed:  (m)  => ipcRenderer.send('rec:failed', m),
+    kick:    ()   => ipcRenderer.send('rec:kick')
   })
 }

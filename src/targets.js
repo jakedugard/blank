@@ -60,6 +60,15 @@ class TargetStore {
     return this.data.scale
   }
 
+  // Whether the pointer is left in a take. Off, so a scroll take is only the
+  // page; on for a click-through, where the pointer is the point.
+  showCursor () { return !!this.data.showCursor }
+  setShowCursor (on) {
+    this.data.showCursor = !!on
+    this.save()
+    return this.data.showCursor
+  }
+
   // Corner radius is a house style rather than a per-project fact, so it's
   // stored once and applied to everything.
   radius () { return Number.isFinite(this.data.radius) ? this.data.radius : 12 }

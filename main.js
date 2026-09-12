@@ -1189,7 +1189,8 @@ ipcMain.on('bar:width', (_e, w) => {
 // A take records the stage window (see src/record.js). With a scroll mode
 // selected in the bar, Record runs the whole thing: record, scroll to the
 // end, settle, stop, reveal the file. The cursor is hidden on the page for
-// the length of the take, since the capture would otherwise draw it.
+// the length of the take unless Show Cursor is on, since the capture draws
+// whatever pointer is over the page.
 
 let recState = null    // null | { phase: 'recording' | 'saved' | 'failed', detail, since }
 let recTake = null     // { withScroll } while a take is under way
@@ -1209,7 +1210,9 @@ function startRecording ({ withScroll = false } = {}) {
       recState = { phase, detail, since: Date.now() }
       refreshTray()
       if (phase === 'recording') {
-        if (view && !view.webContents.isDestroyed()) {
+        // The capture draws the pointer whenever it's over the page. Hidden
+        // unless asked for; a page cursor of none is what macOS then draws.
+        if (view && !view.webContents.isDestroyed() && !store.showCursor()) {
           recCursorKey = await view.webContents.insertCSS('* { cursor: none !important; }').catch(() => null)
         }
         if (recTake && recTake.withScroll) startScroll(1)
@@ -1242,6 +1245,15 @@ ipcMain.on('rec:started', record.started)
 ipcMain.on('rec:chunk', (_e, b) => record.chunk(b))
 ipcMain.on('rec:done', record.done)
 ipcMain.on('rec:failed', (_e, m) => record.failed(m))
+// A still page never hands the capture a frame. Promoting the document to
+// its own compositing layer and back submits a full frame with the same
+// pixels, which is enough for the capture to notice. (invalidate() only
+// does anything under offscreen rendering.)
+ipcMain.on('rec:kick', async () => {
+  if (!view || view.webContents.isDestroyed()) return
+  const key = await view.webContents.insertCSS('html { will-change: transform !important; }').catch(() => null)
+  if (key) setTimeout(() => { if (!view.webContents.isDestroyed()) view.webContents.removeInsertedCSS(key).catch(() => {}) }, 80)
+})
 ipcMain.handle('stage:record', (_e, opts) => toggleRecording(opts || {}))
 let scrollArmed = false   // the bar has a scroll mode selected, so Record means a take
 ipcMain.on('bar:armed', (_e, on) => { scrollArmed = !!on })
@@ -1270,6 +1282,12 @@ function recordingSubmenu () {
       { label: 'Custom…', click: () => bar && bar.webContents.send('custom-matte') }
     ] },
     { label: `Output Size: ${store.scale()}×`, submenu: scaleSubmenu() },
+    {
+      label: 'Show Cursor',
+      type: 'checkbox',
+      checked: store.showCursor(),
+      click: (mi) => { store.setShowCursor(mi.checked); pushState() }
+    },
     { label: 'Open Recordings Folder', click: () => shell.openPath(record.folder()) },
     ...(record.permission() === 'granted' ? [] : [{ label: 'Allow Screen Recording…', click: record.openPermissionSettings }])
   ]
@@ -1354,7 +1372,7 @@ app.whenReady().then(async () => {
       trayImage, updateItem, trayMenuTemplate: () => [updateItem()],
       hideRig, showRig,
       startRecording, stopRecording, recState: () => recState, startScroll,
-      setScale: (n) => store.setScale(n), scaleMenu: scaleSubmenu
+      setScale: (n) => store.setScale(n), scaleMenu: scaleSubmenu, setShowCursor: (on) => store.setShowCursor(on)
     })
   }
 })
