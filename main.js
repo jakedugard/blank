@@ -1204,7 +1204,7 @@ function startRecording ({ withScroll = false } = {}) {
   recTake = { withScroll }
   record.start({
     stage, preload: path.join(__dirname, 'ui', 'preload.js'), name: current.target.name,
-    radius: FEATURES.radius ? store.radius() : 0, matte: store.matte(),
+    radius: FEATURES.radius ? store.radius() : 0, matte: store.matte(), scale: store.scale(),
     onState: async (phase, detail) => {
       recState = { phase, detail, since: Date.now() }
       refreshTray()
@@ -1249,6 +1249,16 @@ function recordShortcut () { toggleRecording({ withScroll: scrollArmed }) }
 ipcMain.handle('stage:recordPermission', () => record.openPermissionSettings())
 ipcMain.handle('stage:setMatte', (_e, c) => { if (/^#[0-9a-f]{6}$/i.test(c)) { store.setMatte(c.toLowerCase()); pushState() } })
 
+// Output size is named in pixels, since that's the question being asked.
+function scaleSubmenu () {
+  const [w, h] = stage && !stage.isDestroyed() ? stage.getContentSize() : [1440, 900]
+  const pick = (n, note) => ({
+    label: `${n}×  ·  ${w * n} × ${h * n}${note}`, type: 'radio', checked: store.scale() === n,
+    click: () => { store.setScale(n); pushState() }
+  })
+  return [pick(2, '  (Retina)'), pick(1, '  (half size)')]
+}
+
 function recordingSubmenu () {
   const matte = store.matte()
   const named = { '#ffffff': 'White', '#000000': 'Black' }[matte.toLowerCase()] || matte
@@ -1259,6 +1269,7 @@ function recordingSubmenu () {
       { type: 'separator' },
       { label: 'Custom…', click: () => bar && bar.webContents.send('custom-matte') }
     ] },
+    { label: `Output Size: ${store.scale()}×`, submenu: scaleSubmenu() },
     { label: 'Open Recordings Folder', click: () => shell.openPath(record.folder()) },
     ...(record.permission() === 'granted' ? [] : [{ label: 'Allow Screen Recording…', click: record.openPermissionSettings }])
   ]
@@ -1342,7 +1353,8 @@ app.whenReady().then(async () => {
       fakeUpdate: (r, d) => { updateReady = r; downloading = d; refreshTray() },
       trayImage, updateItem, trayMenuTemplate: () => [updateItem()],
       hideRig, showRig,
-      startRecording, stopRecording, recState: () => recState, startScroll
+      startRecording, stopRecording, recState: () => recState, startScroll,
+      setScale: (n) => store.setScale(n), scaleMenu: scaleSubmenu
     })
   }
 })

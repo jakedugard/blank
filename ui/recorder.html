@@ -19,7 +19,7 @@
   let stream = null
   let reader = null
 
-  recorder.onStart(async ({ fps, bitrate, matte, radius, cssWidth }) => {
+  recorder.onStart(async ({ fps, bitrate, matte, radius, scale, cssWidth, cssHeight }) => {
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: { ideal: fps, max: fps } },
@@ -31,11 +31,18 @@
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
       let W = 0, H = 0, r = 0
+      let src = { w: 0, h: 0 }
       // Sized from the first frame rather than track.getSettings(), which can
-      // still report the display's size before a frame has arrived.
+      // still report the display's size before a frame has arrived. The
+      // output is the page at `scale` CSS pixels per pixel, never more than
+      // the capture actually has.
       const size = (w, h) => {
-        W = w; H = h
+        src = { w, h }
+        const native = w / cssWidth
+        const k = Math.min(scale, native) / native
+        W = Math.round(w * k); H = Math.round(h * k)
         canvas.width = W; canvas.height = H
+        ctx.imageSmoothingQuality = 'high'   // a clean downsample when k < 1
         r = radius * (W / cssWidth)
       }
       const paint = (img) => {
@@ -58,7 +65,7 @@
         for (;;) {
           const { value: frame, done } = await reader.read()
           if (done) break
-          if (frame.displayWidth !== W || frame.displayHeight !== H) size(frame.displayWidth, frame.displayHeight)
+          if (frame.displayWidth !== src.w || frame.displayHeight !== src.h) size(frame.displayWidth, frame.displayHeight)
           paint(frame)
           frame.close()
           outTrack.requestFrame()
@@ -67,7 +74,10 @@
 
       // Level 5.1: 4.2 tops out around 1080p60, and a 2× 1440×900 stage is
       // well past that. Chrome and QuickTime never minded; stricter decoders do.
-      rec = new MediaRecorder(out, { mimeType: 'video/mp4;codecs=avc1.640033', videoBitsPerSecond: bitrate })
+      // Bits per pixel held steady: a half-size output gets a quarter of the
+      // budget, and never less than a comfortable floor for 60 fps UI.
+      const budget = Math.max(8e6, Math.round(bitrate * (cssWidth * scale * cssHeight * scale) / (2880 * 1800)))
+      rec = new MediaRecorder(out, { mimeType: 'video/mp4;codecs=avc1.640033', videoBitsPerSecond: budget })
       rec.ondataavailable = (e) => { if (e.data.size) e.data.arrayBuffer().then((b) => recorder.chunk(b)) }
       rec.onerror = (e) => recorder.failed(String(e.error || e))
       rec.onstop = () => {

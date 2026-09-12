@@ -50,6 +50,16 @@ class TargetStore {
     this.save()
   }
 
+  // Output scale of a recording: 2 is the display's own pixels on a Retina
+  // Mac, 1 is CSS pixels, half the size in each direction and a quarter of
+  // the file. A house style too.
+  scale () { return this.data.scale === 1 ? 1 : 2 }
+  setScale (n) {
+    this.data.scale = n === 1 ? 1 : 2
+    this.save()
+    return this.data.scale
+  }
+
   // Corner radius is a house style rather than a per-project fact, so it's
   // stored once and applied to everything.
   radius () { return Number.isFinite(this.data.radius) ? this.data.radius : 12 }

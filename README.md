@@ -204,6 +204,9 @@ at the end, stops, and saves. One press, one finished clip.
 The page's cursor is hidden for the length of the take. Rounded corners are
 matted, white by default; ••• → Recording sets Black or any colour, so the
 clip drops into a deck or a timeline without a transparent edge going black.
+**Output Size**, in the same menu, is 2× by default (the display's own pixels
+on a Retina Mac, 2880 × 1800 for a 1440 × 900 page) or 1× for a clip at CSS
+size, half the dimensions and a fraction of the file, for the web or a DM.
 The menu bar icon carries a red dot while a take is running.
 
 The first take asks macOS for Screen Recording permission. If the button
