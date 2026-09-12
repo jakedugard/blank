@@ -116,6 +116,9 @@
      inert underneath it and that has to be obvious. */
   #pinsBtn.on { background:var(--pill); color:var(--accent); }
   #pinsBtn.on:hover { color:var(--ink); }
+  /* Zap lights the same way, for the same reason. */
+  #zapBtn.on { background:var(--pill); color:var(--accent); }
+  #zapBtn.on:hover { color:var(--ink); }
 </style>
 
 <div class="bar" id="bar">
@@ -168,6 +171,13 @@
     <label class="btn num" data-key="pace" title="Glide: how quick the hand is, as a share of the easy pace · ↑↓ to step · drag unit to scrub"><input inputmode="numeric" spellcheck="false" autocomplete="off"><span class="unit">% glide</span></label>
     <label class="btn num" data-key="hold" title="Hold at a pin · ↑↓ to step · drag unit to scrub"><input inputmode="decimal" spellcheck="false" autocomplete="off"><span class="unit">s hold</span></label>
     <label class="btn num" data-key="travel" title="What a screen's worth of travel costs · ↑↓ to step · drag unit to scrub"><input inputmode="decimal" spellcheck="false" autocomplete="off"><span class="unit">s a screen</span></label>
+  </div>
+
+  <!-- Zap. Arm it and the page goes inert: click anything that shouldn't be
+       in the take — a cookie banner, a chat bubble — and it's gone, for this
+       target, on every load. Right-click to restore. -->
+  <div class="group" id="zapWell" hidden>
+    <button class="btn" id="zapBtn" title="Click elements on the page to keep them out of the take · right-click to restore">Zap</button>
   </div>
 
   <!-- Record. With a scroll mode selected it runs the whole take: record,
@@ -402,6 +412,10 @@
   // Starting over shouldn't mean walking down the page unpicking every one.
   $('pinsClear').onclick = () => { stage.pins('clear'); back() }
 
+  // --- zap -------------------------------------------------------------------
+  $('zapBtn').onclick = () => { stage.zaps('toggle'); back() }
+  $('zapWell').addEventListener('contextmenu', (e) => { e.preventDefault(); stage.zapMenu() })
+
   // --- back to the top --------------------------------------------------------
   $('topBtn').onclick = () => { stage.toTop(); back() }
 
@@ -443,6 +457,7 @@
     $('radius').hidden = !s.features.radius || !s.target   // nothing to round yet; its well hides with it
     radius.sync()
     renderScroll(s)
+    renderZap(s)
     renderRecord(s)
 
     const size = $('size')
@@ -457,6 +472,22 @@
     }
 
     fitBar()
+  }
+
+  // Zap counts what's gone from the page and lights while the page is inert.
+  function renderZap (s) {
+    const well = $('zapWell')
+    well.hidden = !s.target
+    if (well.hidden) return
+    const z = s.zaps || { count: 0, zapping: false }
+    const btn = $('zapBtn')
+    btn.textContent = z.zapping
+      ? (z.count ? `Zapping · ${z.count}` : 'Zapping')
+      : (z.count ? `${z.count} zapped` : 'Zap')
+    btn.classList.toggle('on', !!z.zapping)
+    btn.title = z.zapping
+      ? 'Click an element to remove it from the take · ⌘Z takes the last one back · esc or click here when you\'re done'
+      : 'Click elements on the page to keep them out of the take · right-click to restore'
   }
 
   // The record button: a clock while a take runs, the outcome for a moment

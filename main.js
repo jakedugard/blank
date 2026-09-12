@@ -338,6 +338,7 @@ async function loadTarget (target, source, { keepScroll = false } = {}) {
   if (!target) return
   const y = keepScroll ? await getScroll() : 0
   pinning = false   // a fresh page carries no overlay, whatever the last one had
+  zapping = false
   scrollDeep = false
 
   current.target = target
@@ -395,6 +396,7 @@ function restoreScroll (y) {
 async function closeTarget () {
   current.target = null
   pinning = false
+  zapping = false
   teardownSource()
   await hideStage()
   if (view) view.webContents.loadURL('about:blank').catch(() => {})
@@ -438,6 +440,7 @@ function pushState () {
     scrollPresets: Object.fromEntries(Object.entries(SCROLL_PRESETS).map(([m, l]) => [m, l.map(p => p.name)])),
     scrolling: scrollState,
     pins: { count: pinsOf().length, pinning },
+    zaps: { count: zapsOf().length, zapping },
     deep: scrollDeep,
     recording: recState,
     recordPermission: record.permission(),
@@ -593,6 +596,7 @@ function setPinning (on) {
   const want = !!on && !!current.target && !(scrollState && scrollState.active) && !record.active()
   if (want === pinning) { if (!want) pinsCmd('disarm'); return }
   pinning = want
+  if (pinning) setZapping(false)   // one inert page at a time
   pinsCmd(pinning ? 'arm' : 'disarm')
   if (pinning && stage && !stage.isDestroyed()) stage.focus()   // the clicks have to land on the page
   pushState()
@@ -616,10 +620,69 @@ ipcMain.on('pins:remove', (e, i) => {
   setPins(pins.filter((_, idx) => idx !== i))
 })
 
+// --- zaps ------------------------------------------------------------------
+// A zap is an element kept out of the take: a cookie banner, a chat bubble, a
+// badge. Stored as a selector with the target and applied as a stylesheet on
+// every load, so it stays gone across reloads, the ⌘L flip and the site's
+// other pages. Zapping makes the page inert and turns clicks into zaps, and
+// like pinning it can't be on while the page moves or a take runs.
+
+let zapping = false
+let rearmZap = false
+
+function zapsOf () {
+  const z = current.target && current.target.zaps
+  return Array.isArray(z) ? z : []
+}
+
+function zapsCmd (cmd) {
+  if (!view || !current.target || view.webContents.isDestroyed()) return
+  view.webContents.send('zaps:cmd', { cmd, zaps: zapsOf() })
+}
+
+function setZaps (zaps) {
+  if (!current.target) return
+  store.update(current.target.id, { zaps })
+  zapsCmd('apply')
+  pushState()
+}
+
+function setZapping (on) {
+  const want = !!on && !!current.target && !(scrollState && scrollState.active) && !record.active()
+  if (want === zapping) { if (!want) zapsCmd('disarm'); return }
+  zapping = want
+  if (zapping) setPinning(false)   // one inert page at a time
+  zapsCmd(zapping ? 'arm' : 'disarm')
+  if (zapping && stage && !stage.isDestroyed()) stage.focus()   // the clicks have to land on the page
+  pushState()
+}
+
+ipcMain.on('zaps:add', (e, z) => {
+  if (!view || e.sender !== view.webContents || !zapping) return
+  if (!z || !z.sel) return
+  setZaps([...zapsOf(), { sel: String(z.sel), name: String(z.name || z.sel).slice(0, 80) }])
+})
+
+function zapMenu () {
+  const zaps = zapsOf()
+  const restore = (i) => setZaps(zaps.filter((_, idx) => idx !== i))
+  return [
+    { label: zapping ? 'Stop Zapping' : 'Zap Elements', enabled: !!current.target, click: () => setZapping(!zapping) },
+    { label: 'Undo Last Zap    ⌘Z', enabled: !!zaps.length, click: () => restore(zaps.length - 1) },
+    { type: 'separator' },
+    ...(zaps.length
+      ? zaps.map((z, i) => ({ label: `Restore ${z.name || z.sel}`, click: () => restore(i) }))
+      : [{ label: 'Nothing zapped on this page', enabled: false }]),
+    { type: 'separator' },
+    { label: 'Restore All', enabled: !!zaps.length, click: () => setZaps([]) }
+  ]
+}
+
 // ⌥↓ while already scrolling down stops; ⌥↑ mid-run turns around.
 function startScroll (dir) {
   if (scrollState && scrollState.active && scrollState.dir === dir) { scrollCmd('stop'); return }
   setPinning(false)   // the overlay is never in a take
+  setZapping(false)
   const s = scrollSettings()
   // A natural take is seeded so it can be repeated. Fresh each time unless
   // the rhythm is locked, in which case the last seed is reused.
@@ -660,6 +723,14 @@ function hookScrollEvents (wc) {
     if (input.key === 'Escape' && input.type === 'keyDown') {
       if (scrollState && scrollState.active) { e.preventDefault(); scrollCmd('stop') }
       else if (record.active()) { e.preventDefault(); stopRecording() }
+      else if (zapping) { e.preventDefault(); setZapping(false) }
+    }
+
+    // ⌘Z while zapping takes the last zap back.
+    if (zapping && input.meta && !input.shift && !input.alt && (input.key === 'z' || input.key === 'Z')) {
+      e.preventDefault()
+      if (input.type === 'keyDown' && !input.isAutoRepeat) { const z = zapsOf(); if (z.length) setZaps(z.slice(0, -1)) }
+      return
     }
   })
 
@@ -668,6 +739,8 @@ function hookScrollEvents (wc) {
     scrollState = null
     rearmPins = pinning     // if you were pinning, you still are once it lands
     pinning = false
+    rearmZap = zapping
+    zapping = false
     scrollDeep = false
     // Somewhere we didn't send it: the pins were placed on the page we left.
     if (current.target && url !== current.url) {
@@ -681,10 +754,14 @@ function hookScrollEvents (wc) {
   // for whoever was in the middle of pinning — but never on a page you only
   // just opened, where an inert page would be a surprise.
   wc.on('did-finish-load', () => {
+    if (rearmZap) { rearmZap = false; setZapping(true) }
     if (!rearmPins) return
     rearmPins = false
     setPinning(true)
   })
+
+  // Zaps go on as early as the document exists, so a banner never flashes.
+  wc.on('dom-ready', () => { if (zapsOf().length) zapsCmd('apply') })
 }
 
 ipcMain.on('scroll:depth', (e, d) => {
@@ -824,6 +901,7 @@ function popupMoreMenu () {
     { label: 'Reload', accelerator: 'Cmd+R', enabled: !!t, click: () => view && view.webContents.reload() },
     { type: 'separator' },
     ...(FEATURES.scroll ? [{ label: 'Auto-scroll', submenu: scrollSubmenu() }] : []),
+    { label: 'Zap', submenu: zapMenu() },
     { label: 'Recording', submenu: recordingSubmenu() },
     { type: 'separator' },
     { label: 'Open File or Folder…', accelerator: 'Cmd+O', click: pickTarget },
@@ -1084,6 +1162,13 @@ ipcMain.handle('stage:pins', (_e, cmd) => {
   if (cmd === 'clear') setPins([])
   else setPinning(cmd === 'on' ? true : cmd === 'off' ? false : !pinning)
 })
+ipcMain.handle('stage:zaps', (_e, cmd, arg) => {
+  if (cmd === 'clear') setZaps([])
+  else if (cmd === 'undo') { const z = zapsOf(); if (z.length) setZaps(z.slice(0, -1)) }
+  else if (cmd === 'restore') setZaps(zapsOf().filter((_, i) => i !== arg))
+  else setZapping(cmd === 'on' ? true : cmd === 'off' ? false : !zapping)
+})
+ipcMain.handle('stage:zapMenu', () => Menu.buildFromTemplate(zapMenu()).popup({ window: bar }))
 ipcMain.handle('stage:focusStage', () => stage && stage.isVisible() && stage.focus())
 
 // Manual drag: both windows move from a recorded origin plus the pointer delta,
@@ -1114,6 +1199,7 @@ let recClear = null
 function startRecording ({ withScroll = false } = {}) {
   if (record.active() || !current.target) return
   setPinning(false)   // the overlay is never in a take
+  setZapping(false)
   clearTimeout(recClear)
   recTake = { withScroll }
   record.start({
@@ -1251,6 +1337,7 @@ app.whenReady().then(async () => {
       storeBarInCaptures: () => store.barInCaptures(), scrollSettingsNow: scrollSettings, setBarInCaptures: (on) => { store.setBarInCaptures(on); applyBarCapture() },
       scrollState: () => scrollState,
       setPinning, setPins, pinsNow: pinsOf, pinningNow: () => pinning,
+      setZapping, setZaps, zapsNow: zapsOf, zappingNow: () => zapping, zapMenu,
       scrollMenu: scrollSubmenu, recordingMenu: recordingSubmenu,
       fakeUpdate: (r, d) => { updateReady = r; downloading = d; refreshTray() },
       trayImage, updateItem, trayMenuTemplate: () => [updateItem()],
