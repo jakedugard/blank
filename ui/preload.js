@@ -699,19 +699,27 @@ function disarmPins () {
 // site builds again on its next page stays gone. Arming zap makes the page
 // inert and turns clicks into zaps; the element under the cursor is outlined
 // so you can see what's about to go.
+//
+// A zap hides: the box stays in the layout and simply isn't painted, so
+// nothing around it moves. (display:none was the first version, and a zapped
+// grid cell let its neighbours stretch into the gap.) ⌥-click removes
+// instead, for the banner at the top of a page that's pushing everything down.
 
 const ZAP_STYLE = '__blank_zaps'
 
 function applyZaps (zaps) {
   let st = document.getElementById(ZAP_STYLE)
-  const rules = (zaps || []).map(z => z && z.sel).filter(Boolean)
+  const rules = (zaps || []).filter(z => z && z.sel).map(z =>
+    z.mode === 'remove'
+      ? `${z.sel} { display: none !important; }`
+      : `${z.sel} { visibility: hidden !important; }`)
   if (!rules.length) { if (st) st.remove(); return }
   if (!st) {
     st = document.createElement('style')
     st.id = ZAP_STYLE
     ;(document.head || document.documentElement).appendChild(st)
   }
-  st.textContent = rules.map(sel => `${sel} { display: none !important; }`).join('\n')
+  st.textContent = rules.join('\n')
 }
 
 // A short name for the Restore menu: the tag with its id or first class, and
@@ -762,7 +770,7 @@ function onZapDown (e) {
   if (!sel) return
   m.hi.style.display = 'none'
   m.over = null
-  ipcRenderer.send('zaps:add', { sel, name: zapName(el) })
+  ipcRenderer.send('zaps:add', { sel, name: zapName(el), mode: e.altKey ? 'remove' : 'hide' })
 }
 
 function armZap () {

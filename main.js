@@ -660,7 +660,7 @@ function setZapping (on) {
 ipcMain.on('zaps:add', (e, z) => {
   if (!view || e.sender !== view.webContents || !zapping) return
   if (!z || !z.sel) return
-  setZaps([...zapsOf(), { sel: String(z.sel), name: String(z.name || z.sel).slice(0, 80) }])
+  setZaps([...zapsOf(), { sel: String(z.sel), name: String(z.name || z.sel).slice(0, 80), mode: z.mode === 'remove' ? 'remove' : 'hide' }])
 })
 
 function zapMenu () {
@@ -671,7 +671,7 @@ function zapMenu () {
     { label: 'Undo Last Zap    ⌘Z', enabled: !!zaps.length, click: () => restore(zaps.length - 1) },
     { type: 'separator' },
     ...(zaps.length
-      ? zaps.map((z, i) => ({ label: `Restore ${z.name || z.sel}`, click: () => restore(i) }))
+      ? zaps.map((z, i) => ({ label: `Restore ${z.name || z.sel}${z.mode === 'remove' ? '  (removed from layout)' : ''}`, click: () => restore(i) }))
       : [{ label: 'Nothing zapped on this page', enabled: false }]),
     { type: 'separator' },
     { label: 'Restore All', enabled: !!zaps.length, click: () => setZaps([]) }

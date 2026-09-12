@@ -177,6 +177,12 @@ The element under the cursor is outlined; click it and it's gone. Click the
 next thing. **⌘Z** takes the last one back, **esc** (or Zap again) is done.
 The pill counts what's gone.
 
+A zap hides the element in place: its box stays in the layout and simply
+isn't painted, so nothing around it moves and a zapped grid cell doesn't let
+its neighbours stretch into the gap. For the other case, a banner at the top
+of the page that's pushing everything down, **⌥-click** removes it from the
+layout instead and the page closes up.
+
 A zap is stored as the element's selector, with the target, and applied as a
 stylesheet the moment each page's document exists, so nothing flashes before
 it's hidden. That means it holds across a reload, the ⌘L flip to the live URL,
