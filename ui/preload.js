@@ -616,7 +616,7 @@ function pinStyle () {
 function drawPins () {
   const m = pinning
   if (!m) return
-  const el = findScroller()
+  const el = scroller()   // memoised: this runs every frame, and findScroller walks the DOM
   const top = el.scrollTop
   // Each rule carries the index of the pin it draws, so a click that lands on
   // one removes that pin whatever order the page resolved them in.
@@ -692,6 +692,121 @@ function disarmPins () {
   pinning = null
 }
 
+// --- zap --------------------------------------------------------------------
+// A zap is an element you don't want in the take: a cookie banner, a chat
+// bubble, a badge. It's stored as a selector and kept with the target, and
+// applied as a stylesheet rather than by touching the element, so a banner a
+// site builds again on its next page stays gone. Arming zap makes the page
+// inert and turns clicks into zaps; the element under the cursor is outlined
+// so you can see what's about to go.
+//
+// A zap hides: the box stays in the layout and simply isn't painted, so
+// nothing around it moves. (display:none was the first version, and a zapped
+// grid cell let its neighbours stretch into the gap.) ⌥-click removes
+// instead, for the banner at the top of a page that's pushing everything down.
+
+const ZAP_STYLE = '__blank_zaps'
+
+function applyZaps (zaps) {
+  let st = document.getElementById(ZAP_STYLE)
+  const rules = (zaps || []).filter(z => z && z.sel).map(z =>
+    z.mode === 'remove'
+      ? `${z.sel} { display: none !important; }`
+      : `${z.sel} { visibility: hidden !important; }`)
+  if (!rules.length) { if (st) st.remove(); return }
+  if (!st) {
+    st = document.createElement('style')
+    st.id = ZAP_STYLE
+    ;(document.head || document.documentElement).appendChild(st)
+  }
+  st.textContent = rules.join('\n')
+}
+
+// A short name for the Restore menu: the tag with its id or first class, and
+// a little of what it says.
+function zapName (el) {
+  let n = el.localName
+  if (el.id) n += '#' + el.id
+  else if (el.classList.length) n += '.' + el.classList[0]
+  const text = (el.textContent || '').replace(/\s+/g, ' ').trim()
+  if (text) n += ` “${text.length > 24 ? text.slice(0, 24) + '…' : text}”`
+  return n.length > 60 ? n.slice(0, 60) + '…' : n
+}
+
+let zapping = null
+
+function zapStyle () {
+  const el = document.createElement('style')
+  el.textContent = `
+    .blank-zap-hi { position:fixed; z-index:2147483647; pointer-events:none; box-sizing:border-box;
+      border:1.5px solid rgba(255,59,48,.85); background:rgba(255,59,48,.12); border-radius:3px;
+      display:none; }
+    .blank-zapping, .blank-zapping * { cursor:crosshair !important; }
+  `
+  return el
+}
+
+// html and body would take the whole page with them.
+const zappable = (el) => el && el.nodeType === 1 && el !== document.documentElement && el !== document.body
+
+function zapHover (e) {
+  const m = zapping
+  if (!m) return
+  const el = e.target
+  if (!zappable(el)) { m.over = null; m.hi.style.display = 'none'; return }
+  m.over = el
+  const r = el.getBoundingClientRect()
+  Object.assign(m.hi.style, { display: 'block', left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' })
+}
+
+function onZapDown (e) {
+  if (e.button !== 0 || e.metaKey) return   // ⌘-drag still moves the rig
+  eatEvent(e)
+  const m = zapping
+  if (!m) return
+  const el = zappable(e.target) ? e.target : m.over
+  if (!zappable(el)) return
+  const sel = selectorFor(el)
+  if (!sel) return
+  m.hi.style.display = 'none'
+  m.over = null
+  ipcRenderer.send('zaps:add', { sel, name: zapName(el), mode: e.altKey ? 'remove' : 'hide' })
+}
+
+function armZap () {
+  if (zapping) return
+  const style = zapStyle()
+  const hi = document.createElement('div')
+  hi.className = 'blank-zap-hi'
+  document.documentElement.appendChild(style)
+  document.documentElement.appendChild(hi)
+  document.documentElement.classList.add('blank-zapping')
+  zapping = { style, hi, over: null }
+  window.addEventListener('mousemove', zapHover, true)
+  for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu']) {
+    window.addEventListener(type, type === 'mousedown' ? onZapDown : eatEvent, true)
+  }
+}
+
+function disarmZap () {
+  const m = zapping
+  if (!m) return
+  window.removeEventListener('mousemove', zapHover, true)
+  for (const type of ['mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu']) {
+    window.removeEventListener(type, type === 'mousedown' ? onZapDown : eatEvent, true)
+  }
+  m.hi.remove()
+  m.style.remove()
+  document.documentElement.classList.remove('blank-zapping')
+  zapping = null
+}
+
+ipcRenderer.on('zaps:cmd', (_e, m) => {
+  if (m.cmd === 'apply') applyZaps(m.zaps)
+  else if (m.cmd === 'arm') armZap()
+  else if (m.cmd === 'disarm') disarmZap()
+})
+
 ipcRenderer.on('pins:cmd', (_e, m) => {
   if (m.cmd === 'arm') armPins(m.pins)
   else disarmPins()
@@ -725,6 +840,8 @@ if (isOwnUI) {
     scrollAs:   (m, d) => ipcRenderer.invoke('stage:scrollAs', m, d),
     scrollPreset: (n)  => ipcRenderer.invoke('stage:scrollPreset', n),
     pins:      (cmd)  => ipcRenderer.invoke('stage:pins', cmd),
+    zaps:      (cmd, arg) => ipcRenderer.invoke('stage:zaps', cmd, arg),
+    zapMenu:   ()     => ipcRenderer.invoke('stage:zapMenu'),
     record:     (o)    => ipcRenderer.invoke('stage:record', o),
     armed:      (on)   => ipcRenderer.send('bar:armed', !!on),
     recordPermission: () => ipcRenderer.invoke('stage:recordPermission'),
@@ -757,6 +874,7 @@ if (isRecorder) {
     started: ()   => ipcRenderer.send('rec:started'),
     chunk:   (b)  => ipcRenderer.send('rec:chunk', b),
     done:    ()   => ipcRenderer.send('rec:done'),
-    failed:  (m)  => ipcRenderer.send('rec:failed', m)
+    failed:  (m)  => ipcRenderer.send('rec:failed', m),
+    kick:    ()   => ipcRenderer.send('rec:kick')
   })
 }

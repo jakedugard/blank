@@ -9,7 +9,7 @@ const path = require('path')
 
 const FPS = 60
 const START_TIMEOUT = 6000   // the encoder has this long to say it's rolling
-const BITRATE = 40e6   // 40 Mb/s: generous for 2880×1800 UI motion, small on disk per second
+const BITRATE = 40e6   // 40 Mb/s at 2880×1800: generous for UI motion; scaled down with the output size
 
 let recWin = null      // the hidden encoder window
 let job = null         // { file, stream, onState, name }
@@ -55,7 +55,7 @@ function stamp () {
 
 // Start a take of `stage`. `name` names the file; `onState` hears
 // 'recording' | 'saved' | 'failed' with a detail.
-async function start ({ stage, preload, name, matte = '#ffffff', radius = 0, onState }) {
+async function start ({ stage, preload, name, matte = '#ffffff', radius = 0, scale = 2, onState }) {
   if (job) return
   if (!stage || stage.isDestroyed() || !stage.isVisible()) return onState('failed', 'no page')
 
@@ -79,7 +79,8 @@ async function start ({ stage, preload, name, matte = '#ffffff', radius = 0, onS
   job.watchdog = setTimeout(() => {
     if (job && !job.rolling) failed('the recorder did not start')
   }, START_TIMEOUT)
-  win.webContents.send('rec:start', { fps: FPS, bitrate: BITRATE, matte, radius, cssWidth: stage.getContentSize()[0] })
+  const [cssWidth, cssHeight] = stage.getContentSize()
+  win.webContents.send('rec:start', { fps: FPS, bitrate: BITRATE, matte, radius, scale, cssWidth, cssHeight })
 }
 
 function stop () {

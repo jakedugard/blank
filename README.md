@@ -29,6 +29,8 @@ the bar, sizing, the scroll settings, and a take from start to saved file.
 - **Records itself.** Press Record and blank captures the page alone, straight
   to an MP4 in your Movies folder. With a scroll mode selected, one press is
   the whole take: record, scroll to the end, stop, save.
+- **Zaps what's in the way.** A cookie banner, a chat bubble, a badge: press
+  Zap, click it, and it's gone from every take of that site.
 - **Local or live.** Drop in a folder you're building in and it live-reloads
   as you save. Paste the URL you shipped it to and flip between the two at
   the same scroll position.
@@ -164,6 +166,35 @@ All three engines run in the preload's isolated world on `requestAnimationFrame`
 so they're frame-accurate and pages can't see them. Pages that scroll a container
 rather than the document get the largest scrollable element.
 
+## Zap
+
+Live sites come with things you'd never put in a recording: the cookie
+banner, the chat bubble in the corner, a "made with" badge. You can't edit the
+site, so **Zap** edits the take.
+
+Press Zap in the bar and the page goes inert, the way it does for pinning.
+The element under the cursor is outlined; click it and it's gone. Click the
+next thing. **⌘Z** takes the last one back, **esc** (or Zap again) is done.
+The pill counts what's gone.
+
+A zap hides the element in place: its box stays in the layout and simply
+isn't painted, so nothing around it moves and a zapped grid cell doesn't let
+its neighbours stretch into the gap. For the other case, a banner at the top
+of the page that's pushing everything down, **⌥-click** removes it from the
+layout instead and the page closes up.
+
+A zap is stored as the element's selector, with the target, and applied as a
+stylesheet the moment each page's document exists, so nothing flashes before
+it's hidden. That means it holds across a reload, the ⌘L flip to the live URL,
+and the site's other pages, where a banner is usually the same element again.
+Right-click the pill (or ••• → Zap) to restore any one of them by name, or all
+of them. If a site rebuilds its DOM so a selector no longer matches, nothing
+breaks; the element is back, and so is your finger.
+
+Zap and Pin can't both be armed, since each makes the page inert, and both turn
+themselves off the moment the page starts moving or a take starts, so the
+outline is never in a recording.
+
 ## Recording
 
 You don't need a screen recorder. **Record** in the bar (or ⌘⇧R) captures
@@ -179,6 +210,11 @@ at the end, stops, and saves. One press, one finished clip.
 The page's cursor is hidden for the length of the take. Rounded corners are
 matted, white by default; ••• → Recording sets Black or any colour, so the
 clip drops into a deck or a timeline without a transparent edge going black.
+**Show Cursor**, in the same menu, leaves the pointer in the take for a
+click-through of a prototype; it's off by default, so a scroll take is only
+the page. **Output Size** is 2× by default (the display's own pixels
+on a Retina Mac, 2880 × 1800 for a 1440 × 900 page) or 1× for a clip at CSS
+size, half the dimensions and a fraction of the file, for the web or a DM.
 The menu bar icon carries a red dot while a take is running.
 
 The first take asks macOS for Screen Recording permission. If the button
@@ -189,6 +225,7 @@ and record again.
 
 | ⌘O | open | ⌘K | focus bar | ⌘R | reload | ⌘⇧W | close page | ⌘H ⌘. | hide |
 | ⌥↓ | scroll down | ⌥↑ | scroll up | P (hold) | pause | esc | stop | ⌘⇧R | record |
+| ⌘Z | undo a zap (while zapping) | esc | done zapping |
 
 The stage has no chrome to grab, so **⌘-drag anywhere on the page** moves the
 stage and bar together, and the bar itself drags from any non-control area.
@@ -232,8 +269,12 @@ macOS captures the stage window alone: `desktopCapturer` finds it by
 to whatever asks for it. The encoder is Chromium's own `MediaRecorder`, which
 in Electron 44 writes H.264 MP4 directly (`video/mp4;codecs=avc1.64002A`). It
 has to run in a renderer, so a hidden window hosts it and streams chunks back
-to main to be written to disk. Frames pass through a canvas that paints the
-matte behind the rounded corners, since a transparent corner records black.
+to main to be written to disk. Frames are pulled off the capture track as macOS
+delivers them and each is painted and handed on at once, so the file holds one
+frame per captured frame with the capture's own timing (an earlier timer-driven
+recorder sampled at 62.5 Hz and repeated about one frame in nine of a scroll).
+Each frame passes through a canvas that paints the matte behind the rounded
+corners, since a transparent corner records black.
 There is no API to keep the cursor out of a window capture, so the page gets
 `cursor: none` for the take. Verified at 2880 × 1800, 60 fps, while scrolling.
 
@@ -282,6 +323,6 @@ can be driven and screenshotted without a hand on the keyboard.
 ## Not built yet
 
 Frame-stepped capture through ffmpeg for takes that can't drop a frame,
-cookie zapper, smooth-scroll adapters.
+smooth-scroll adapters for pages that hijack the wheel (Lenis and friends).
 
 </details>

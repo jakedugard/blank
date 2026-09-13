@@ -5,14 +5,22 @@
   // The encoder. Main hands this window the stage as its display source
   // (see src/record.js), so getDisplayMedia here never shows a picker.
   //
+  // Frames are pulled off the capture track as macOS delivers them, and each
+  // one is painted and handed on at once, so the file holds one frame per
+  // captured frame with the capture's own timing. The earlier design painted
+  // a <video> of the capture on a setInterval: that timer ran at 62.5 Hz
+  // (Chromium truncates 1000/60 to 16 ms) against a 60 Hz source, so about
+  // one frame in nine of a scroll was a repeat of the one before.
+  //
   // The window's rounded corners come through the capture as black, so the
   // frames go through a canvas: a matte is painted first, then the page is
   // drawn inside the same rounded rectangle the stage clips to.
   let rec = null
   let stream = null
-  let timer = 0
+  let reader = null
+  let heartbeat = 0
 
-  recorder.onStart(async ({ fps, bitrate, matte, radius, cssWidth }) => {
+  recorder.onStart(async ({ fps, bitrate, matte, radius, scale, cssWidth, cssHeight }) => {
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: { ideal: fps, max: fps } },
@@ -20,31 +28,25 @@
         cursor: 'never', surfaceSwitching: 'exclude', selfBrowserSurface: 'exclude'   // a page, not a screencast
       })
       const track = stream.getVideoTracks()[0]
-      const video = document.createElement('video')
-      video.srcObject = stream
-      video.muted = true
-      // Not `await video.play()`: this window is never shown, and in a hidden
-      // window that promise can hang forever rather than reject — which left
-      // the take running with no encoder behind it and no way to stop. Ask for
-      // playback, wait only until there are frames to draw, and give up waiting
-      // rather than give up entirely. The size comes from the track, not the
-      // element, so nothing below depends on this having finished.
-      video.play().catch(() => {})
-      await Promise.race([
-        new Promise((r) => { if (video.readyState >= 2) r(); else video.onloadeddata = r }),
-        new Promise((r) => setTimeout(r, 1500))
-      ])
-      const { width: W, height: H } = track.getSettings()
-      const scale = W / cssWidth
-      const r = radius * scale
 
       const canvas = document.createElement('canvas')
-      canvas.width = W; canvas.height = H
       const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
-      const out = canvas.captureStream(0)
-      const outTrack = out.getVideoTracks()[0]
-
-      const draw = () => {
+      let W = 0, H = 0, r = 0
+      let src = { w: 0, h: 0 }
+      // Sized from the first frame rather than track.getSettings(), which can
+      // still report the display's size before a frame has arrived. The
+      // output is the page at `scale` CSS pixels per pixel, never more than
+      // the capture actually has.
+      const size = (w, h) => {
+        src = { w, h }
+        const native = w / cssWidth
+        const k = Math.min(scale, native) / native
+        W = Math.round(w * k); H = Math.round(h * k)
+        canvas.width = W; canvas.height = H
+        ctx.imageSmoothingQuality = 'high'   // a clean downsample when k < 1
+        r = radius * (W / cssWidth)
+      }
+      const paint = (img) => {
         ctx.fillStyle = matte
         ctx.fillRect(0, 0, W, H)
         if (r > 0) {
@@ -52,20 +54,56 @@
           ctx.beginPath()
           ctx.roundRect(0, 0, W, H, r)
           ctx.clip()
-          ctx.drawImage(video, 0, 0, W, H)
+          ctx.drawImage(img, 0, 0, W, H)
           ctx.restore()
-        } else ctx.drawImage(video, 0, 0, W, H)
-        outTrack.requestFrame()
+        } else ctx.drawImage(img, 0, 0, W, H)
       }
-      // A hidden window gets no requestAnimationFrame; a timer with
-      // background throttling off keeps the cadence.
-      timer = setInterval(draw, 1000 / fps)
 
-      rec = new MediaRecorder(out, { mimeType: 'video/mp4;codecs=avc1.64002A', videoBitsPerSecond: bitrate })
+      const out = canvas.captureStream(0)
+      const outTrack = out.getVideoTracks()[0]
+      let last = null          // the newest frame, kept so stillness can be repainted
+      let lastAt = 0
+      const t0 = performance.now()
+      reader = new MediaStreamTrackProcessor({ track }).readable.getReader()
+      ;(async () => {
+        for (;;) {
+          const { value: frame, done } = await reader.read()
+          if (done) break
+          if (frame.displayWidth !== src.w || frame.displayHeight !== src.h) size(frame.displayWidth, frame.displayHeight)
+          paint(frame)
+          if (last) last.close()
+          last = frame
+          outTrack.requestFrame()
+          lastAt = performance.now()
+        }
+        if (last) { last.close(); last = null }
+      })().catch((e) => { if (rec && rec.state === 'recording') recorder.failed(String(e && e.message || e)) })
+      // macOS only delivers a frame when the window's pixels change, so a
+      // still page would leave the file short — or, if nothing ever changed,
+      // empty. Two answers: until the first frame arrives, main is asked to
+      // repaint the stage, which counts as a change; after that, whenever the
+      // capture has been quiet for two and a half frames, the newest
+      // frame is painted and sent again with a fresh timestamp. (Asking the
+      // canvas stream for a frame without painting sends nothing.) Motion
+      // never trips this; stillness is held with genuine duplicates.
+      heartbeat = setInterval(() => {
+        const now = performance.now()
+        if (!last) { if (now - t0 > 60 && Math.round(now / (1000 / fps)) % 8 === 0) recorder.kick(); return }
+        if (now - lastAt > 2500 / fps) { paint(last); outTrack.requestFrame(); lastAt = now }
+      }, 1000 / fps)
+
+
+      // Level 5.1: 4.2 tops out around 1080p60, and a 2× 1440×900 stage is
+      // well past that. Chrome and QuickTime never minded; stricter decoders do.
+      // Bits per pixel held steady: a half-size output gets a quarter of the
+      // budget, and never less than a comfortable floor for 60 fps UI.
+      const budget = Math.max(8e6, Math.round(bitrate * (cssWidth * scale * cssHeight * scale) / (2880 * 1800)))
+      rec = new MediaRecorder(out, { mimeType: 'video/mp4;codecs=avc1.640033', videoBitsPerSecond: budget })
       rec.ondataavailable = (e) => { if (e.data.size) e.data.arrayBuffer().then((b) => recorder.chunk(b)) }
       rec.onerror = (e) => recorder.failed(String(e.error || e))
       rec.onstop = () => {
-        clearInterval(timer)
+        clearInterval(heartbeat)
+        reader.cancel().catch(() => {})
         stream.getTracks().forEach((t) => t.stop())
         outTrack.stop()
         setTimeout(() => recorder.done(), 300)   // chunks in flight land first
@@ -74,7 +112,7 @@
       rec.start(250)
       recorder.started()
     } catch (e) {
-      clearInterval(timer)
+      clearInterval(heartbeat)
       recorder.failed(e && e.message ? e.message : String(e))
     }
   })
@@ -84,7 +122,8 @@
   // believing a take was running.
   recorder.onStop(() => {
     if (rec && rec.state === 'recording') { rec.stop(); return }
-    clearInterval(timer)
+    clearInterval(heartbeat)
+    if (reader) reader.cancel().catch(() => {})
     if (stream) stream.getTracks().forEach((t) => t.stop())
     recorder.failed('the recorder never started')
   })
