@@ -1,6 +1,6 @@
 {
   "name": "blank",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "A stripped-down browser for clean screen recordings",
   "main": "main.js",
   "scripts": {
