@@ -1194,15 +1194,69 @@ ipcMain.on('bar:width', (_e, w) => {
 
 let recState = null    // null | { phase: 'recording' | 'saved' | 'failed', detail, since }
 let recTake = null     // { withScroll } while a take is under way
-let recCursorKey = null
+let recCursorHidden = false
 let recClear = null
 
-function startRecording ({ withScroll = false } = {}) {
+// Hiding the pointer for a take. The capture draws whatever cursor is over
+// the page, so the page's cursor becomes none: a style element in every
+// frame and in every open shadow root, since a document sheet stops at a
+// shadow boundary and that's exactly where a web component keeps its hand
+// (Cargo, for one). Author origin, because a user-origin sheet would reach
+// everywhere but can't be removed again (Electron 44: removeInsertedCSS
+// returns and the rule stays); instead the selectors out-rank anything a
+// page writes. Components that appear mid-take are covered as they arrive.
+const HEAVY = ':not(#_)'.repeat(8)
+const CURSOR_ON = `(() => {
+  const K = '__blankCursor'
+  if (window[K]) window[K].off()
+  const DOC = 'html${HEAVY}, html${HEAVY} * { cursor: none !important; }'
+  const SHADOW = ':host, ${HEAVY} { cursor: none !important; }'
+  const styles = []
+  const observers = []
+  const inject = (root) => {
+    const s = document.createElement('style')
+    s.textContent = root === document ? DOC : SHADOW
+    ;(root === document ? document.documentElement : root).appendChild(s)
+    styles.push(s)
+    const mo = new MutationObserver((muts) => {
+      for (const m of muts) for (const n of m.addedNodes) if (n.nodeType === 1) cover(n)
+    })
+    mo.observe(root === document ? document.documentElement : root, { childList: true, subtree: true })
+    observers.push(mo)
+    for (const e of root.querySelectorAll('*')) if (e.shadowRoot) inject(e.shadowRoot)
+  }
+  const cover = (n) => {
+    if (n.shadowRoot) inject(n.shadowRoot)
+    for (const e of n.querySelectorAll('*')) if (e.shadowRoot) inject(e.shadowRoot)
+  }
+  inject(document)
+  window[K] = { off () { observers.forEach(o => o.disconnect()); styles.forEach(s => s.remove()); delete window[K] } }
+})()`
+const CURSOR_OFF = `(() => { if (window.__blankCursor) window.__blankCursor.off() })()`
+
+function hideCursor (wc, on) {
+  const run = (frame) => {
+    frame.executeJavaScript(on ? CURSOR_ON : CURSOR_OFF).catch(() => {})
+    for (const child of frame.frames) run(child)
+  }
+  try { run(wc.mainFrame) } catch { /* frame gone mid-walk */ }
+}
+
+async function startRecording ({ withScroll = false } = {}) {
   if (record.active() || !current.target) return
   setPinning(false)   // the overlay is never in a take
   setZapping(false)
   clearTimeout(recClear)
   recTake = { withScroll }
+  // The capture draws whatever cursor is over the page, so the page's cursor
+  // becomes none before the capture starts, with a beat for Chromium to
+  // swap it: done at "recording" it was already in the first frames.
+  if (view && !view.webContents.isDestroyed() && !store.showCursor()) {
+    hideCursor(view.webContents, true)
+    recCursorHidden = true
+    await new Promise(r => setTimeout(r, 150))
+  }
+  if (record.active() || !current.target) return
   record.start({
     stage, preload: path.join(__dirname, 'ui', 'preload.js'), name: current.target.name,
     radius: FEATURES.radius ? store.radius() : 0, matte: store.matte(), scale: store.scale(),
@@ -1210,16 +1264,11 @@ function startRecording ({ withScroll = false } = {}) {
       recState = { phase, detail, since: Date.now() }
       refreshTray()
       if (phase === 'recording') {
-        // The capture draws the pointer whenever it's over the page. Hidden
-        // unless asked for; a page cursor of none is what macOS then draws.
-        if (view && !view.webContents.isDestroyed() && !store.showCursor()) {
-          recCursorKey = await view.webContents.insertCSS('* { cursor: none !important; }').catch(() => null)
-        }
         if (recTake && recTake.withScroll) startScroll(1)
       } else {
         recTake = null
-        if (recCursorKey && view && !view.webContents.isDestroyed()) view.webContents.removeInsertedCSS(recCursorKey).catch(() => {})
-        recCursorKey = null
+        if (recCursorHidden && view && !view.webContents.isDestroyed()) hideCursor(view.webContents, false)
+        recCursorHidden = false
         if (phase === 'saved') shell.showItemInFolder(detail)
         // The outcome shows in the bar for a moment, then the button is itself again.
         // "Allow recording ↗" is an instruction, not an outcome: it asks you to
