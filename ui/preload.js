@@ -616,7 +616,7 @@ function pinStyle () {
 function drawPins () {
   const m = pinning
   if (!m) return
-  const el = findScroller()
+  const el = scroller()   // memoised: this runs every frame, and findScroller walks the DOM
   const top = el.scrollTop
   // Each rule carries the index of the pin it draws, so a click that lands on
   // one removes that pin whatever order the page resolved them in.
