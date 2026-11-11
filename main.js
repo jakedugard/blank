@@ -107,11 +107,50 @@ function createStage () {
   view.webContents.on('did-finish-load', () => suppressScrollbars(view.webContents))
   view.webContents.on('did-frame-finish-load', () => suppressScrollbars(view.webContents))
 
-  // External links would make this a browser. Hand them to the real one.
-  view.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url)
-    return { action: 'deny' }
+  view.webContents.setWindowOpenHandler(openHandler)
+  view.webContents.on('did-create-window', (win) => {
+    win.webContents.setWindowOpenHandler(openHandler)
   })
+}
+
+// New windows. External links would make this a browser, so they go to the
+// real one. Two exceptions. A sign-in popup ("Continue with Google") stays
+// here: it has to finish in the session that opened it and hand the result
+// back to window.opener, and in Chrome it signs Chrome in and strands the
+// page. A new tab on the page's own site loads in place, since that's still
+// the work being shown. The popup is its own window, so a take never sees it.
+const AUTH_HOST = /(^|\.)(accounts\.google\.com|appleid\.apple\.com|login\.microsoftonline\.com|login\.live\.com|auth0\.com|okta\.com|firebaseapp\.com|supabase\.co|clerk\.accounts\.dev)$/i
+const isSignIn = (u) => AUTH_HOST.test(u.hostname) ||
+  (u.hostname === 'github.com' && /^\/login(\/|$)/.test(u.pathname))
+
+function openHandler ({ url, disposition }) {
+  let target = null
+  try { target = new URL(url) } catch { /* about:blank, or nothing */ }
+  // window.open with a size, or a blank window a script is about to point
+  // somewhere (Firebase opens its popup that way), or a known sign-in host.
+  const popup = disposition === 'new-window' || !target || target.protocol === 'about:' ||
+    isSignIn(target)
+  if (popup) {
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        parent: stage || undefined,
+        width: 500,
+        height: 640,
+        show: true,
+        autoHideMenuBar: true,
+        webPreferences: { contextIsolation: true }
+      }
+    }
+  }
+  let here = null
+  try { here = new URL(view.webContents.getURL()).origin } catch { /* no page */ }
+  if (here && target.origin === here) {
+    view.webContents.loadURL(url).catch(() => {})
+  } else if (/^(https?|mailto):$/.test(target.protocol)) {
+    shell.openExternal(url).catch(() => {})
+  }
+  return { action: 'deny' }
 }
 
 // --- fades ------------------------------------------------------------------
@@ -1188,9 +1227,11 @@ ipcMain.on('bar:width', (_e, w) => {
 // --- recording ----------------------------------------------------------------
 // A take records the stage window (see src/record.js). With a scroll mode
 // selected in the bar, Record runs the whole thing: record, scroll to the
-// end, settle, stop, reveal the file. The cursor is hidden on the page for
-// the length of the take unless Show Cursor is on, since the capture draws
-// whatever pointer is over the page.
+// end, settle, stop, reveal the file. In a scroll take the cursor is hidden on
+// the page for its length unless Show Cursor When Scrolling is on, since the
+// capture draws whatever pointer is over the page. A take with no scroll mode
+// is driven by hand, a click-through, and the pointer is the point of it, so
+// it always stays.
 
 let recState = null    // null | { phase: 'recording' | 'saved' | 'failed', detail, since }
 let recTake = null     // { withScroll } while a take is under way
@@ -1251,7 +1292,7 @@ async function startRecording ({ withScroll = false } = {}) {
   // The capture draws whatever cursor is over the page, so the page's cursor
   // becomes none before the capture starts, with a beat for Chromium to
   // swap it: done at "recording" it was already in the first frames.
-  if (view && !view.webContents.isDestroyed() && !store.showCursor()) {
+  if (withScroll && view && !view.webContents.isDestroyed() && !store.showCursor()) {
     hideCursor(view.webContents, true)
     recCursorHidden = true
     await new Promise(r => setTimeout(r, 150))
@@ -1332,7 +1373,7 @@ function recordingSubmenu () {
     ] },
     { label: `Output Size: ${store.scale()}×`, submenu: scaleSubmenu() },
     {
-      label: 'Show Cursor',
+      label: 'Show Cursor When Scrolling',
       type: 'checkbox',
       checked: store.showCursor(),
       click: (mi) => { store.setShowCursor(mi.checked); pushState() }
@@ -1394,6 +1435,9 @@ function cliArgs (argv) {
 app.whenReady().then(async () => {
   store = new TargetStore(app.getPath('userData'))
   if (app.dock) app.dock.hide()          // menu bar only; see createTray
+  // Plain Chrome to the sites it loads. Google's sign-in refuses a user agent
+  // that names Electron ("This browser or app may not be secure").
+  app.userAgentFallback = app.userAgentFallback.replace(/ (Electron|blank)\/\S+/g, '')
   buildMenu()
   createStage()
   createBar()

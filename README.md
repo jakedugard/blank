@@ -50,6 +50,13 @@ rather than over the page because the bar is the part macOS leaves out of a
 capture, and it holds its slot there whether or not it's showing, so passing
 that quarter mark doesn't resize the rig.
 
+**Signing in.** A sign-in popup (Continue with Google, Apple, Microsoft, and
+the like) opens in a small window of its own and finishes in blank, so the page
+behind it ends up signed in; the window is never in a take. Sign-ins are kept
+between launches. A link that opens a new tab on the same site loads in place;
+a link to anywhere else opens in your default browser. blank tells sites it's
+plain Chrome, since Google refuses to sign in a browser that names Electron.
+
 ## Model
 
 A **target** is a project, not a URL. It can hold two sources for the same
@@ -207,12 +214,12 @@ With Steady or Natural selected, Record is the whole take: it starts the
 recording, runs the scroll after the pre-roll, waits for the page to settle
 at the end, stops, and saves. One press, one finished clip.
 
-The page's cursor is hidden for the length of the take. Rounded corners are
-matted, white by default; ••• → Recording sets Black or any colour, so the
-clip drops into a deck or a timeline without a transparent edge going black.
-**Show Cursor**, in the same menu, leaves the pointer in the take for a
-click-through of a prototype; it's off by default, so a scroll take is only
-the page. **Output Size** is 2× by default (the display's own pixels
+With no scroll mode selected, the take is yours to drive, a click-through of
+a prototype say, and the pointer stays in it. A scroll take hides the page's
+cursor for its length, so it's only the page; **Show Cursor When Scrolling**,
+in ••• → Recording, keeps it there too. Rounded corners are matted, white by
+default; the same menu sets Black or any colour, so the clip drops into a deck
+or a timeline without a transparent edge going black. **Output Size** is 2× by default (the display's own pixels
 on a Retina Mac, 2880 × 1800 for a 1440 × 900 page) or 1× for a clip at CSS
 size, half the dimensions and a fraction of the file, for the web or a DM.
 The menu bar icon carries a red dot while a take is running.
